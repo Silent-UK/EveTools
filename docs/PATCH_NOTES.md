@@ -1,3 +1,10 @@
+# EveTools v1.0.0 - Isotope courier pricing and hauler workflow
+
+- Configure directional isotope quantities and ISK-per-isotope costs. Isotope mode calculates the courier reward from fuel only, without a volume surcharge or site quote request.
+- Automatically refresh corporation-assigned courier snapshots while Logistics is enabled, respecting ESI caches; show matched route fuel costs alongside actual rewards.
+- Add exclusive hauler Claim, Release and Complete actions and completed history. Distinguish locally recorded delivery from ESI-verified completion.
+- Preserve legacy volume pricing, cargo limits, admin-only settings and approval-based Logistics access.
+
 # EveTools v1.0.0
 
 Initial public release of EveTools: self-hosted pilot and corporation management built around EVE SSO and ESI.

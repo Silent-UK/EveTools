@@ -14,8 +14,20 @@ Pilots select From and To, route space and cargo volume. Max fills the selected 
 
 All members can submit and view their own requests. Approved Logistics members and site admins can review the request queue and open Pending. Only the request owner accepts a quote; staff record delivery after it happens in EVE.
 
-Pending uses the existing corporation contract sync and scope (`esi-contracts.read_corporation_contracts.v1`). It shows courier contracts assigned to this installation's corporation, with outstanding or in-progress status. Expired outstanding offers and completed, failed, cancelled or unrelated contracts are excluded. Search by pilot, contract or route, or filter Pending/Accepted. The deadline is the offer expiry for pending contracts, or acceptance time plus days to complete for accepted contracts.
+Pending uses the existing corporation contract sync and scope (`esi-contracts.read_corporation_contracts.v1`). It shows courier contracts assigned to this installation's corporation, with outstanding or in-progress status. Expired outstanding offers, failed, cancelled and unrelated contracts are excluded from the active queue. Claimed couriers that finish remain in Completed history. Search by pilot, contract or route, or filter Pending/Accepted. The deadline is the offer expiry for pending contracts, or acceptance time plus days to complete for accepted contracts.
 
-No contract is accepted or completed in EVE by these controls. Accept and deliver in-game. Refresh view reads the existing snapshot and normal background refresh; it does not bypass ESI caching. Sync time, refreshing state, retained records and refresh failures are labelled. Requests are not automatically matched or settled against EVE contracts.
+No contract is accepted or completed in EVE by these controls. Accept and deliver in-game. Refresh view reads the existing snapshot and normal background refresh; it does not bypass ESI caching. Sync time, refreshing state, retained records and refresh failures are labelled. Legacy quote requests are not automatically settled against EVE contracts.
 
 For fictional layout checks, set `PREVIEW_LOGISTICS=1` before running `node scripts/preview.mjs`.
+
+## Isotope-only courier pricing
+
+Under Logistics → Admin, choose **Isotope cost only**. Add a directional pickup/destination route, total isotopes consumed for that journey, and ISK per isotope. The reward is `ceil(isotopes × ISK per isotope)` in whole ISK. Cargo volume enforces the route-space limit and calculates configured collateral; it does not increase the hauling reward. Configure the reverse direction separately. A route with no price shows a warning rather than inventing a quote.
+
+Pilots select locations and use the **Courier fuel calculator**, then create the courier in EVE addressed to the corporation with that reward and appropriate collateral. No site quote request is needed in this mode. Volume/quoted-fee pricing and previous requests remain available for installations using the older workflow. Optional numeric station/structure IDs on locations let the queue match ESI locations even when the displayed names differ; otherwise exact names are matched without case sensitivity. Matching routes display their current fuel cost alongside the actual EVE reward, flagging a difference without altering the contract.
+
+## Hauler assignment and completion
+
+Approved Logistics members and site admins use **Pending → Claim** to reserve a courier. Claims are exclusive. Only its assigned account can Release or Complete it. Complete asks the hauler to confirm delivery in EVE, moves it out of the active queue and retains it under the Completed filter. A local completion is labelled **awaiting ESI confirmation** until the corporation snapshot reports `finished`. ESI-finished claimed couriers appear completed automatically. Tools never accepts, delivers or pays an EVE contract on the pilot's behalf.
+
+While enabled, Logistics checks corporation contracts in the background every minute and refreshes its shared snapshot after about five minutes, subject to ESI response caching, scope availability and failures. The open Pending tab refreshes every minute while visible and outside active input editing. Cached data, update timestamps and failures remain labelled. Expired offers and non-courier/outbound contracts are excluded. Claims and completion records persist across settings changes and plugin disable/re-enable.

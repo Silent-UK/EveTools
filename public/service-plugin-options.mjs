@@ -1,7 +1,7 @@
 export const servicePlugins = {
  timerboard: {label:'Timerboard',icon:'◷',description:'Track friendly, hostile and neutral structure timers.'},
  buyback: {label:'Buyback', icon:'◈', description:'Sell items to the corporation through an agreed quote.', quote:'Buyback offer', complete:'Mark paid', completed:'Paid'},
- logistics: {label:'Logistics', icon:'↗', description:'Request a haul and agree the delivery fee.', quote:'Hauling fee', complete:'Mark delivered', completed:'Delivered'}
+ logistics: {label:'Logistics', icon:'↗', description:'Calculate courier costs and manage corporation deliveries.', quote:'Hauling fee', complete:'Mark delivered', completed:'Delivered'}
 };
 
 export function pluginToggle(label,enabled,description='',icon='◇') {

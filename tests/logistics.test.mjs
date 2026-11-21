@@ -17,3 +17,12 @@ test('Courier queue excludes expired offers, outbound, finished and unrelated co
  const p=courierQueue({updated:100,error:'secret details',contracts:[{...base,contract_id:1},{...base,contract_id:2,status:'in_progress',date_accepted:'2026-01-01T00:00:00Z',days_to_complete:3},{...base,contract_id:3,date_expired:'2000-01-01'},{...base,contract_id:4,status:'finished'},{...base,contract_id:5,assignee_id:100}]},99);
  assert.deepEqual(p.contracts.map(r=>r.id),[1,2]);assert.equal(p.contracts[1].expires,'2026-01-04T00:00:00.000Z');assert.ok(!p.error.includes('secret'));
 });
+
+test('directional isotope pricing charges only fuel and never scales with cargo volume',()=>{
+ const s={...logisticsDefaults(),pricingMode:'isotopes',locations:[{name:'A',pickup:true,destination:true,locationId:1},{name:'B',pickup:true,destination:true,locationId:2}],routes:[{from:'A',to:'B',isotopes:1000,isotopePrice:543.21}]};
+ assert.equal(logisticsSettings(s).routes.length,1);
+ for(const volume of [1,350000])assert.equal(logisticsQuote(s,{from:'A',to:'B',space:'nullsec',volume,collateral:0}).estimatedFee,543210);
+ assert.throws(()=>logisticsQuote(s,{from:'B',to:'A',space:'nullsec',volume:1,collateral:0}),/No isotope cost/);
+ assert.throws(()=>logisticsSettings({...s,routes:[...s.routes,...s.routes]}),/unique/);
+ assert.throws(()=>logisticsSettings({...s,routes:[{...s.routes[0],isotopes:-1}]}));
+});

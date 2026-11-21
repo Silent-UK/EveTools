@@ -17,7 +17,7 @@ EveTools is a self-hosted EVE Online management platform for pilots and corporat
 | Dashboard and operations | Announcements, Needs your action, attack/reinforcement alerts, PI and contract notices, Timerboard targets, searchable timers and recurring calendar events |
 | Discord plugin | Account linking, pilot name matching with approval, optional group-role sync, configurable alerts, daily fuel summaries and an updating timerboard |
 | SRP and Buyback plugins | Claim review, approval amounts and rejection reasons, account-wide payout requests, buyback quotes, payments and contract settlement |
-| Logistics plugin | Approved hauler group, admin-managed pickup/destination lists, cargo limits, fee/collateral estimates and an incoming courier contract queue |
+| Logistics plugin | Approved hauler group, directional isotope-only pricing, cargo limits, ESI courier queue and exclusive hauler claim/completion tracking |
 | Community and administration | Approval/rule-based groups, recruitment and inspection tools, page permissions, announcements, configurable identity and an audit log |
 
 Pages support compact layouts and mobile use. Features can be enabled as needed; access is controlled on the server. Saved snapshots remain available during temporary API failures, with their status shown.

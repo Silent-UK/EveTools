@@ -412,7 +412,7 @@ export function createApp(config) {
   sitePageRoutes(app,{db,config});
   discordRoutes(app,{discord,config});
   const marketPI=jitaPricing(db,eve,true);
-  const services=servicePluginRoutes(app,{db,config,cat,jitaQuotes:marketPI,contracts:()=>corp.contracts()});
+  const services=servicePluginRoutes(app,{db,config,cat,jitaQuotes:marketPI,contracts:()=>corp.contracts({ttl:300000})});
   const servicePluginStates=async req=>({...services.pluginStates(req),timerboard:await timerboard.visible(req)});
   db.exec('CREATE TABLE IF NOT EXISTS contributor_groups (kind TEXT PRIMARY KEY, group_id INTEGER NOT NULL REFERENCES access_groups(id) ON DELETE CASCADE)');
   const contributorGroup=db.prepare('SELECT group_id FROM contributor_groups WHERE kind=?');
@@ -1216,14 +1216,14 @@ export function createApp(config) {
         : message,
     });
   });
-  return { app, db, cat, sync, corp, recruitment, discord, publishing, usersReview, recruitMembership, groupEnrolment };
+  return { app, db, cat, sync, corp, recruitment, discord, publishing, usersReview, recruitMembership, groupEnrolment, logistics:services.logistics };
 }
 if (
   process.argv[1] &&
   realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)
 ) {
   const config = runtimeConfig();
-  const { app, sync, corp, recruitment, discord, publishing, usersReview, recruitMembership, groupEnrolment } = createApp(config);
+  const { app, sync, corp, recruitment, discord, publishing, usersReview, recruitMembership, groupEnrolment, logistics } = createApp(config);
   app.listen(config.port, "127.0.0.1", () =>
     console.log("Tools listening on " + config.port),
   );
@@ -1237,6 +1237,8 @@ if (
   recruitment.schedule();
   setInterval(()=>recruitment.schedule(),3600000).unref();
   setInterval(()=>recruitment.tick().catch(()=>console.error("Recruitment sync failed")),3000).unref();
+  logistics.tick().catch(()=>console.error('Logistics contract refresh failed'));
+  setInterval(()=>logistics.tick().catch(()=>console.error('Logistics contract refresh failed')),60000).unref();
   sync.schedule();
   corp.schedule();
   setInterval(()=>corp.tickNotifications().catch(()=>console.error("Corporation notification sync failed")),15000).unref();

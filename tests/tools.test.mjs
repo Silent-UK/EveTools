@@ -1756,7 +1756,7 @@ test('an in-flight sync cannot restore a deleted account snapshot or sync error'
 test('fitting workbench saves private copies, protects ownership and rejects other-account pilot checks',()=>fixture(async({db,user,request})=>{
  const a=user(7101,'Builder'),b=user(7102,'Other');
  assert.equal((await request('/api/fitting-workbench/source')).status,401);
- const source=await request('/api/fitting-workbench/source',{session:a.session});assert.equal(source.status,200);assert.match(source.headers.get('content-disposition'),/tools-fitting-source.zip/);
+ const source=await request('/api/fitting-workbench/source',{session:a.session});assert.equal(source.status,200);assert.match(source.headers.get('content-disposition'),/tools-fitting-source.zip/);assert.ok((await source.arrayBuffer()).byteLength>1000);
  const license=await request('/api/fitting-workbench/license',{session:a.session});assert.equal(license.status,200);assert.match(await license.text(),/GNU AFFERO GENERAL PUBLIC LICENSE/);
  const fit={ship_id:1,name:'Workbench Test',items:[]};
  const create=await request('/api/fitting-workbench/save',{session:a.session,method:'POST',body:{fit}});assert.equal(create.status,200);const {id}=await create.json();
@@ -3153,4 +3153,29 @@ test('Logistics approval group gates courier queues and admins alone control rou
  assert.ok(!(await(await call('/api/groups',pilot)).json()).some(g=>g.id===group));
  assert.equal((await enable(true)).status,200);assert.equal(db.prepare("SELECT review_group FROM service_plugin_settings WHERE plugin='logistics'").get().review_group,group);
  assert.deepEqual((await(await call('/api/logistics',pilot)).json()).settings,settings);
+}));
+
+
+test('Logistics courier claims are exclusive, completion is owned and ESI verification remains distinct',()=>fixture(async({db,user,request,corp})=>{
+ const owner=user(100,'Owner'),a=user(971,'Hauler A'),b=user(972,'Hauler B'),outsider=user(973,'Other');
+ const post=(path,who,body)=>request(path,{session:who.session,method:'POST',body});
+ await post('/api/admin/service-plugins/logistics',owner,{enabled:true});
+ const group=db.prepare("SELECT review_group FROM service_plugin_settings WHERE plugin='logistics'").get().review_group;
+ for(const who of [a,b])db.prepare('INSERT INTO group_members VALUES(?,?,?)').run(group,who.uid,'approved');
+ let status='outstanding';corp.contracts=async()=>({updated:Date.now(),contracts:[{contract_id:771,type:'courier',assignee_id:668298004,status,start_location_id:1,end_location_id:2,reward:500000,date_expired:'2099-01-01'}],locations:{1:'Actual pickup',2:'Actual drop'}});
+ const settings={locations:[{name:'Pickup',locationId:1,pickup:true,destination:true},{name:'Drop',locationId:2,pickup:true,destination:true}],maxVolumes:{nullsec:350000,lowsec:350000,empire:350000},pricePerM3:999,collateralPerM3:0,pricingMode:'isotopes',routes:[{from:'Pickup',to:'Drop',isotopes:1000,isotopePrice:500}]};
+ assert.equal((await post('/api/logistics/settings',owner,settings)).status,200);
+ const path='/api/logistics/couriers/771',list=async who=>(await(await request('/api/logistics/pending',{session:who.session})).json()).contracts;
+ assert.equal((await list(a))[0].expectedReward,500000);
+ assert.equal((await post(path,outsider,{action:'claim'})).status,403);
+ const claims=await Promise.all([post(path,a,{action:'claim'}),post(path,b,{action:'claim'})]);assert.deepEqual(claims.map(r=>r.status).sort(),[200,409]);
+ const winner=claims[0].status===200?a:b,other=winner===a?b:a;
+ assert.equal((await post(path,other,{action:'complete'})).status,409);
+ assert.equal((await post(path,winner,{action:'release'})).status,200);
+ assert.equal((await post(path,other,{action:'claim'})).status,200);
+ assert.equal((await post(path,other,{action:'complete'})).status,200);
+ let row=(await list(other))[0];assert.equal(row.workflowStatus,'completed');assert.equal(row.verified,false);assert.equal(row.completedBy,other===a?'Hauler A':'Hauler B');
+ assert.equal((await post(path,winner,{action:'claim'})).status,409);
+ status='finished';row=(await list(other))[0];assert.equal(row.verified,true);assert.equal(row.workflowStatus,'completed');
+ assert.equal((await post('/api/logistics/couriers/999',a,{action:'claim'})).status,404);
 }));

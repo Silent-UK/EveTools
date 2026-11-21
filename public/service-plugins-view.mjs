@@ -107,7 +107,7 @@ export function servicePluginsUI({api,esc,intro,date,num,toast,refresh,account})
   if(page==='timerboard')return timerboard.render();
   const plugin = servicePlugins[page], view = views[page];
   let logisticsTabs='';
-  if(page==='logistics'){logisticsTabs=await logistics.load(view.queue);const body=await logistics.content();if(body!==null)return intro(plugin.label,plugin.description)+`<div class="logistics-page">${logisticsTabs}${body}</div>`;}
+  if(page==='logistics'){logisticsTabs=await logistics.load(view.queue);const body=await logistics.content()??(!view.queue?logistics.calculator():null);if(body!==null)return intro(plugin.label,plugin.description)+`<div class="logistics-page">${logisticsTabs}${body}</div>`;}
   if(page==='buyback'&&paymentView.open) return intro(plugin.label,plugin.description)+`<div class="buyback-page">${await paymentPage()}</div>`;
   const data = await api(`/service-plugins/${page}?view=${view.queue?'queue':'mine'}&status=${view.status}&offset=${view.offset}`);
   const queue = data.admin && view.queue;
