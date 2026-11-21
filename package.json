@@ -1,0 +1,22 @@
+{
+  "name": "evetools",
+  "version": "1.0.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env server.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "check": "node scripts/check.mjs",
+    "pretest": "node scripts/build-fitting-source.mjs",
+    "build:fitting-engine": "node scripts/build-fitting-engine.mjs"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "helmet": "^8.1.0",
+    "jose": "^6.1.0"
+  }
+}

@@ -1,0 +1,21 @@
+[Unit]
+Description=EveTools pilot and corporation management
+After=network-online.target
+Wants=network-online.target
+[Service]
+Type=simple
+User=evetools
+Group=evetools
+WorkingDirectory=/opt/evetools/releases/current
+EnvironmentFile=/etc/evetools/evetools.env
+ExecStart=/usr/bin/node /opt/evetools/releases/current/server.mjs
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/evetools
+[Install]
+WantedBy=multi-user.target

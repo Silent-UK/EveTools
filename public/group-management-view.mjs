@@ -1,0 +1,30 @@
+const modes={'auto':'Auto Accept','approval':'Approval','restricted':'Restricted','auto-enrol':'Auto Enrol'};
+export function matchingMemberships(data,query=''){
+ const q=query.trim().toLocaleLowerCase();
+ return data.requests.filter(r=>!q||[r.name,...JSON.parse(r.pilot_names||'[]')].some(n=>String(n).toLocaleLowerCase().includes(q)));
+}
+function groupSettings(g,data,esc,ruleLabel){
+ const pages=(g.pages||[]).map(id=>data.pages?.[id]||data.management_pages?.[id]||id);
+ if(g.create_events&&!pages.includes(data.pages?.['corp-calendar']))pages.push(data.pages?.['corp-calendar']||'Operations Calendar');
+ const actions=[g.create_events&&'Create calendar events',g.create_timers&&'Create timers and targets'].filter(Boolean);
+ return `<div class="group-settings-summary">
+  ${g.description?`<p>${esc(g.description)}</p>`:''}
+  <small><strong>Visibility</strong> · ${g.hidden?'Hidden from members':g.recruit_visible?'Members and recruits':'Members'}</small>
+  <small><strong>Page access</strong> · ${esc([...new Set(pages)].join(', ')||'None')}</small>
+  <small><strong>Can create</strong> · ${esc(actions.join(', ')||'No shared events or timers')}</small>
+  ${data.discord_enabled?`<small><strong>Discord membership alerts</strong> · ${g.discord_notify?'On':'Off'}</small>`:''}
+  <small><strong>Discord role</strong> · ${esc(g.discord_role_id||'None')}</small>
+  ${g.rules?.length?`<small><strong>Requirements</strong> · ${g.rules.map(ruleLabel).join(' · ')}</small>`:''}
+ </div>`;
+}
+export function groupMembershipView(data,query,esc,ruleLabel=r=>esc(r.name||r.kind)){
+ const rows=matchingMemberships(data,query),decision=r=>`<button data-group-decision="${r.group_id}" data-user="${r.user_id}" data-status="approved">${r.status==='rejected'?'Restore':'Approve'}</button> <button data-group-decision="${r.group_id}" data-user="${r.user_id}" data-status="rejected">Reject</button>`;
+ const table=items=>`<div class="harvest-table"><table><thead><tr><th>Pilot</th><th>Group</th><th>Status</th><th>Actions</th></tr></thead><tbody>${items.map(r=>`<tr><td>${esc(r.name)}</td><td>${esc(r.group_name)}</td><td>${esc(({pending:'Awaiting approval',approved:'Approved',rejected:'Rejected',ineligible:'Requirements not met'})[r.status]||r.status)}</td><td>${decision(r)}</td></tr>`).join('')}</tbody></table></div>`;
+ const pending=rows.filter(r=>r.status==='pending'),other=rows.filter(r=>['rejected','ineligible'].includes(r.status));
+ return `<section class="panel compact"><h2>Applications · ${pending.length}</h2>${pending.length?table(pending):'<small>No pending applications.</small>'}</section><section class="panel compact"><h2>Group Membership</h2><small>${query?'Matching memberships':'Approved members'} · expand a group to manage its pilots.</small>${data.groups.map(g=>{const members=rows.filter(r=>r.group_id===g.id&&r.status==='approved');if(query&&!members.length)return '';return `<details class="group-membership" ${query?'open':''}><summary><strong>${esc(g.icon)} ${esc(g.name)}</strong> · ${members.length} member${members.length===1?'':'s'} <small>· ${esc(modes[g.mode]||g.mode)}${g.hidden?' · Hidden':''}</small></summary>${groupSettings(g,data,esc,ruleLabel)}${members.length?`<div class="harvest-table"><table><thead><tr><th>Pilot</th><th>Actions</th></tr></thead><tbody>${members.map(r=>`<tr><td>${esc(r.name)}</td><td><button data-group-decision="${r.group_id}" data-user="${r.user_id}" data-status="rejected">Revoke</button></td></tr>`).join('')}</tbody></table></div>`:'<small>No approved members.</small>'}</details>`;}).join('')||'<small>No matching group memberships.</small>'}</section>${other.length?`<section class="panel compact"><details><summary>Rejected / Requirements Not Met · ${other.length}</summary>${table(other)}</details></section>`:''}`;
+}
+
+export function manualGroupMemberForm(data,esc){
+ const options=(data.users||[]).flatMap(u=>[...new Set([u.name,...JSON.parse(u.pilot_names||'[]')])].map(name=>`<option value="${esc(name+' · '+u.name+' (#'+u.main_id+')')}" data-user-id="${u.id}"></option>`)).join('');
+ return `<section class="panel compact"><details><summary>Add Member Manually</summary><form id="group-member-add-form" class="toolbar"><label>Group<select name="group" required><option value="">Choose group…</option>${data.groups.map(g=>`<option value="${g.id}">${esc(g.name)}${g.hidden?' · Hidden':''}</option>`).join('')}</select></label><label>Pilot<input name="pilot" list="group-member-accounts" placeholder="Search main or alt…" required autocomplete="off"><datalist id="group-member-accounts">${options}</datalist></label><button class="primary" ${!data.groups.length||!data.users?.length?'disabled':''}>Add Member</button></form><small>Select a registered account. Restricted and Auto Enrol requirements still apply.</small></details></section>`;
+}

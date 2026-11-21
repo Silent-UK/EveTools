@@ -1,0 +1,43 @@
+// Parent identity is per pilot, never a ship name or type ID.
+export function assetTree(items) {
+ const byId=new Map(items.map(a=>[String(a.item_id),a])),children=new Map();
+ const roots=[];
+ for(const a of items){const parent=byId.get(String(a.location_id));if(parent&&parent!==a){const key=String(parent.item_id);if(!children.has(key))children.set(key,[]);children.get(key).push(a);}else roots.push(a);}
+ const result=[],seen=new Set();
+ const walk=(rows,depth)=>{for(const a of [...rows].sort((a,b)=>Number(Boolean(a.empty_office))-Number(Boolean(b.empty_office))||a.name.localeCompare(b.name)||String(a.item_id).localeCompare(String(b.item_id)))){const key=String(a.item_id);if(seen.has(key))continue;seen.add(key);result.push({...a,depth});walk(children.get(key)||[],depth+1);}};
+ walk(roots,0);walk(items.filter(a=>!seen.has(String(a.item_id))),0);return result;
+}
+export function assetMatches(items,q,location,{exact=false,test=()=>true}={}) {
+ q=String(q||'').trim().toLowerCase();location=String(location||'').toLowerCase();
+ const byId=new Map(items.map(a=>[String(a.item_id),a]));
+ const matches=items.filter(a=>test(a)&&(!q||(exact?[a.name,a.search_type_name,a.custom_name].some(name=>typeof name==='string'&&name.toLowerCase()===q):a.name.toLowerCase().includes(q)))&&a.location.toLowerCase().includes(location));
+ const direct=new Set(matches.map(a=>String(a.item_id))),included=new Set(direct);
+ for(const item of matches){let parent=byId.get(String(item.location_id));const seen=new Set([String(item.item_id)]);while(parent&&!seen.has(String(parent.item_id))){seen.add(String(parent.item_id));included.add(String(parent.item_id));parent=byId.get(String(parent.location_id));}}
+ // When a ship matches, show its fitted modules too; cargo still obeys the search.
+ for(const item of items)if(direct.has(String(item.location_id))&&/^(Hi|Med|Lo|Rig|SubSystem|Service)Slot\d+$/.test(item.location_flag))included.add(String(item.item_id));
+ return items.filter(a=>included.has(String(a.item_id))).map(a=>({...a,context:!direct.has(String(a.item_id))}));
+}
+
+// Stack only equivalent siblings. Parent items remain distinct so ships keep their own fittings.
+export function stackAssetRows(items) {
+ const parents=new Set(items.map(a=>String(a.location_id))),groups=new Map(),rows=[];
+ const slot=flag=>String(flag||'').replace(/^(Hi|Med|Lo|Rig|SubSystem|Service)Slot\d+$/,'$1 slots');
+ for(const item of items){
+  if(parents.has(String(item.item_id))){rows.push({...item});continue;}
+  const key=JSON.stringify([item.character_id,item.root_location_id,item.location_id,item.type_id??item.name,slot(item.location_flag),Boolean(item.is_blueprint_copy),Boolean(item.is_singleton),Boolean(item.context)]);
+  const existing=groups.get(key);
+  if(existing){existing.quantity+=item.quantity;existing.count++;existing.location_flag=slot(item.location_flag);}
+  else {const row={...item,count:1};groups.set(key,row);rows.push(row);}
+ }
+ return assetTree(rows);
+}
+
+// Office wrappers are empty only when the full inventory has no stored descendants.
+export function markEmptyOffices(items){
+ const byId=new Map(items.map(a=>[String(a.item_id),a])),occupied=new Set();
+ for(const item of items.filter(a=>a.type_id!==27&&a.quantity!==0)){
+  let parent=byId.get(String(item.location_id));const seen=new Set([String(item.item_id)]);
+  while(parent&&!seen.has(String(parent.item_id))){seen.add(String(parent.item_id));if(parent.type_id===27)occupied.add(String(parent.item_id));parent=byId.get(String(parent.location_id));}
+ }
+ return items.map(a=>({...a,empty_office:a.type_id===27&&!occupied.has(String(a.item_id))}));
+}

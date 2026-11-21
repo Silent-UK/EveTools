@@ -1,0 +1,181 @@
+import {homeCategories,homePreference} from './home-categories.mjs';
+import {groupsDirectoryView,groupTabs} from './groups-directory-view.mjs';
+import {groupMembershipView,manualGroupMemberForm} from './group-management-view.mjs';
+import {rattingPreferences,rattingBounds,rattingAnalysis,rattingCSV} from './ratting-model.mjs';
+import {rattingView} from './ratting-view.mjs';
+import {pageIcons,notificationOptions} from './settings-options.mjs';
+import {CORPORATE_PAGE_DESCRIPTIONS} from './corporate-page-descriptions.mjs';
+import {groupIconPicker} from './group-icons.mjs';
+import {THEMES} from './themes.mjs';
+import {memberGroups,plainEveText} from './detail-models.mjs';
+import {readGroupImage} from './group-image-upload.mjs';
+export function managementUI({setTheme,api,esc,intro,table,num,date,empty,context,refresh,refreshAlerts,toast}){
+ let rattingFilters=rattingPreferences(),rattingScope='',rattingPilots=[],rattingOffset=0,memberSort='last_active',memberGrouped=false,conditionChoices={roles:[],titles:[]};
+ let settingsTab='appearance',groupsTab='open',groupSearch='',groupManagementData=null;
+ let inspectPilot=null,contactPage=1,mailBefore=null,mailId=null,editing=null,groups=[],links=[];
+ const face=(id,name)=>`<span class="pilot-face"><img class="pilot-avatar" src="https://images.evetech.net/characters/${Number(id)}/portrait?size=64" alt="" loading="lazy"><strong>${esc(name)}</strong></span>`;
+ const mailFrom=(row,names={})=>esc(names[row.from]||(row.from?'Character '+row.from:'Unknown sender'));
+ const mailTo=(row,names={})=>(row.recipients||[]).map(r=>esc(names[r.recipient_type==='mailing_list'?'mailing_list:'+r.recipient_id:r.recipient_id]||({mailing_list:'Mailing List',corporation:'Corporation',alliance:'Alliance',character:'Character'}[r.recipient_type]||'Recipient')+' '+r.recipient_id)).join(', ')||'Unavailable';
+ const currency=n=>n==null?'Unavailable':Number(n).toLocaleString('en-GB',{maximumFractionDigits:2})+' ISK';
+ const notice=s=>s?`<p class="notice">${esc(s)}</p>`:'';
+ const source=(title,url,s,body)=>`<section class="panel compact"><h2><a href="${url}" target="_blank" rel="noopener noreferrer">${title} ↗</a></h2>${s?.checked?`<small>Checked ${date(s.checked)}</small>`:''}${notice(s?.error)}${s?.data?body(s.data):empty('Data unavailable')}</section>`;
+ function saveRatting(){try{localStorage.setItem(rattingScope,JSON.stringify(rattingFilters));}catch{}}
+ function loadRatting(){const {me}=context(),scope='tools-ratting:'+me.main_id+':'+(me.inspect?.name||'self');if(scope===rattingScope)return;rattingScope=scope;rattingOffset=0;try{rattingFilters=rattingPreferences(JSON.parse(localStorage.getItem(scope)||'{}'));rattingBounds(rattingFilters);}catch{rattingFilters=rattingPreferences();}}
+ async function render(page){
+  const {me,chars}=context();
+  if(page==='settings'){
+   const d=await api('/settings');
+   const sections=[
+    ['appearance','Appearance & Notifications',`<div class="settings-columns"><section class="panel compact settings-list"><h2>Appearance</h2><label class="setting-row"><span><strong>Theme</strong><small>Choose your colours. Saved for your account.</small></span><select id="settings-theme" aria-label="Theme" ${me.inspect?'disabled':''}>${Object.entries(THEMES).map(([id,name])=>`<option value="${id}" ${id===(d.preferences.theme||document.documentElement.dataset.theme||'nebula')?'selected':''}>${name}</option>`).join('')}</select></label><label class="setting-row"><span><strong>Font Size</strong><small>Scale text across the site. Normal keeps the current size.</small></span><select id="settings-font-size" aria-label="Font Size" ${me.inspect?'disabled':''}>${Object.entries({normal:'Normal',small:'Small',large:'Large','extra-large':'Extra Large'}).map(([id,name])=>`<option value="${id}" ${id===(d.preferences.font_size||'normal')?'selected':''}>${name}</option>`).join('')}</select></label><label class="setting-row"><span><strong>Side Panel Font Size</strong><small>Saved for your account and applied to the sidebar menu.</small></span><select id="sidebar-font-size" aria-label="Side Panel Font Size" ${me.inspect?'disabled':''}>${Array.from({length:11},(_,i)=>i+10).map(size=>`<option value="${size}" ${size===(d.preferences.sidebar_font_size||12)?'selected':''}>${size}px${size===12?' (Default)':''}</option>`).join('')}</select></label></section><section class="panel compact settings-list"><h2>Notification Settings</h2><small>Choose which in-app alerts appear. Your pages and data sync stay on.</small>${Object.entries(notificationOptions).filter(([id])=>id!=='notify-discord-setup'||me.admin).map(([id,name])=>`<label class="setting-row"><span><strong>${name}</strong></span><input class="slide-toggle" type="checkbox" role="switch" aria-label="${name} notifications" data-page-toggle="${id}" ${d.preferences[id]!==false?'checked':''} ${me.inspect?'disabled':''}></label>`).join('')}</section></div>`],
+    ['home','Dashboard',`<section class="panel compact settings-list"><h2>Dashboard sections</h2><small>Choose which sections appear on the Dashboard.</small>${homeCategories.map(({id,label,icon})=>{
+     const key=homePreference(id);
+     return `<label class="setting-row"><span><strong><span aria-hidden="true">${icon}</span> ${label}</strong></span><input class="slide-toggle" type="checkbox" role="switch" aria-label="Show ${label} on Home" data-page-toggle="${key}" ${d.preferences[key]!==false?'checked':''} ${me.inspect?'disabled':''}></label>`;
+    }).join('')}</section>`],
+    ['characters','My Characters',`<section class="panel compact settings-list"><h2>My Characters</h2>${Object.entries(d.pages).map(([id,name])=>`<label class="setting-row"><span><strong><span aria-hidden="true">${pageIcons[id]||''}</span> ${name}</strong><small>${d.display_pages?.includes(id)?'Hide from your sidebar. Data continues syncing.':id==='ratting'?'Wallet history continues syncing for Wallet.':['industry','blueprints'].includes(id)?'Industry and Blueprints share a sync; it pauses when both pages are disabled.':id==='pi'?'PI shared with other people continues syncing.':'Re-enable to resume on the next sync.'}</small></span><input class="slide-toggle" type="checkbox" role="switch" aria-label="Show ${name}" data-page-toggle="${id}" ${d.preferences[id]!==false?'checked':''} ${me.inspect?'disabled':''}></label>`).join('')}</section>`],
+    ['links','Links & Custom Pages',`<section class="panel compact settings-list"><h2>Links & Custom Pages</h2><small>Hide entries from your sidebar. Your access permissions stay unchanged.</small><label class="setting-row"><span><strong>↗ Links Section</strong></span><input class="slide-toggle" type="checkbox" role="switch" aria-label="Show Links Section" data-page-toggle="links-section" ${d.preferences['links-section']!==false?'checked':''} ${me.inspect?'disabled':''}></label>${(d.custom_pages||[]).map(p=>`<label class="setting-row"><span><strong>▤ ${esc(p.name)}</strong></span><input class="slide-toggle" type="checkbox" role="switch" aria-label="Show Custom Page ${esc(p.name)}" data-page-toggle="page-${p.id}" ${d.preferences['page-'+p.id]!==false?'checked':''} ${me.inspect?'disabled':''}></label>`).join('')}</section>`],
+   ];
+   if(Object.keys(d.corporate_pages||{}).length)sections.push(['corporation','Corporation Management',`<section class="panel compact settings-list corporation-settings"><h2>Corporation Management</h2><small>These toggles only hide pages from your sidebar. Corporation data continues syncing.</small>${Object.entries(d.corporate_pages).map(([id,name])=>`<label class="setting-row"><span><strong><span aria-hidden="true">${pageIcons[id]||''}</span> ${name}</strong></span><input class="slide-toggle" type="checkbox" role="switch" aria-label="Show Corporation ${name}" data-page-toggle="${id}" ${d.preferences[id]!==false?'checked':''} ${me.inspect?'disabled':''}></label>`).join('')}</section>`]);
+   if(Object.keys(d.admin_pages||{}).length)sections.push(['admin','Admin',`<section class="panel compact settings-list"><h2>Admin</h2><small>Hide menu items for your account. Permissions and background tasks stay unchanged.</small>${Object.entries(d.admin_pages).map(([id,name])=>`<label class="setting-row"><span><strong><span aria-hidden="true">${pageIcons[id]||''}</span> ${name}</strong></span><input class="slide-toggle" type="checkbox" role="switch" aria-label="Show Admin ${name}" data-page-toggle="${id}" ${d.preferences[id]!==false?'checked':''} ${me.inspect?'disabled':''}></label>`).join('')}</section>`]);
+   if(!sections.some(([id])=>id===settingsTab))settingsTab='appearance';
+   return intro('Settings','Manage your appearance, alerts and sidebar preferences.')+
+    `<div class="settings-tabs-page"><div class="panel compact group-tabs settings-tabs" role="tablist" aria-label="Settings areas">${sections.map(([id,label])=>
+      `<button type="button" id="settings-tab-${id}" role="tab" aria-selected="${id===settingsTab}" aria-controls="settings-panel-${id}" tabindex="${id===settingsTab?0:-1}" data-settings-tab="${id}" ${id===settingsTab?'class="primary"':''}>${label}</button>`
+    ).join('')}</div>${sections.map(([id,,content])=>
+      `<div id="settings-panel-${id}" role="tabpanel" aria-labelledby="settings-tab-${id}" ${id===settingsTab?'':'hidden'}>${content}</div>`
+    ).join('')}</div>`;
+  }
+  if(page==='ratting'){
+   loadRatting();if(rattingFilters.pilot&&!chars.some(c=>String(c.id)===rattingFilters.pilot))rattingFilters.pilot='';rattingPilots=await api('/ratting?detail=1');saveRatting();
+   return intro('Ratting','Recorded NPC bounties and ESS payments across your mains and alts. All dates use UTC.')+rattingView(rattingPilots,chars,rattingFilters,rattingOffset);
+  }
+  if(page==='groups'){
+   groups=await api('/groups');return intro('Groups',me.recruit?'Groups available to recruits. Joining does not unlock member or corporation pages.':'Your memberships and the groups you can join.')+`<div class="groups-page" id="groups-directory">${groupsDirectoryView(groups,{me,tab:groupsTab,esc,ruleLabel})}</div>`;
+  }
+  if(page==='admin-group-management'){
+   groupManagementData=await api('/admin/groups');return intro('Group Management','Review applications and manage group memberships. Search a main or alt to find their account’s groups.')+manualGroupMemberForm(groupManagementData,esc)+`<div class="toolbar"><label>Find Pilot<input id="group-member-search" type="search" placeholder="Search main or alt name…" value="${esc(groupSearch)}"></label></div><div id="group-membership-results">${groupMembershipView(groupManagementData,groupSearch,esc,ruleLabel)}</div>`;
+  }
+  if(page==='admin-groups'){
+   const [d,choices]=await Promise.all([api('/admin/groups'),api('/admin/group-conditions')]);conditionChoices=choices;groups=d.groups;const g=groups.find(g=>g.id===editing)||{name:'',description:'',icon:'◇',mode:'auto',rules:[],pages:[]};
+   return intro('Group Setup','Configure membership and page access. All membership requirements must be met by the same pilot.')+`<section class="panel compact"><h2>${editing?'Edit Group':'Add Group'}</h2><form id="access-group-form" class="management-form group-editor"><div class="group-editor-details">${groupIconPicker(g.icon)}<label>Group image<input name="group_image" type="file" accept="image/png,image/jpeg,image/webp"><small>PNG, JPEG or WebP · larger images are resized automatically</small></label>${g.has_image?`<img class="group-upload-preview" src="/api/groups/${g.id}/image" alt="Current group image"><label class="inline"><input name="remove_image" type="checkbox"> Remove image</label>`:''}<label>Name<input name="name" required maxlength="80" value="${esc(g.name)}"></label><label>Description<textarea name="description" maxlength="2000">${esc(g.description)}</textarea></label><label>Discord Role ID · Optional<input name="discord_role_id" inputmode="numeric" value="${esc(g.discord_role_id||'')}" placeholder="Copy Role ID from Discord"><small>Approved members receive this role after linking Discord in Settings.</small></label>${d.discord_enabled?`<label class="inline"><input name="discord_notify" type="checkbox" ${g.discord_notify?'checked':''}> Send Discord membership alerts</label><small>Uses the join, leave and request channels set in Discord → Notifications.</small>`:''}<label class="inline"><input name="hidden" type="checkbox" ${g.hidden?'checked':''}> Hidden group</label><small>Hidden from the Groups page, including for its members. Only admins can add people manually. Auto Enrol still runs if selected.</small><label class="inline"><input name="recruit_visible" type="checkbox" ${g.recruit_visible?'checked':''}> Visible to recruits</label><small>Recruits can see and apply to this group. Other groups remain hidden. Member and staff page access stays locked until membership is confirmed.</small><label>Approval Method<select name="mode">${[['auto','Auto Accept'],['approval','Approval'],['restricted','Restricted'],['auto-enrol','Auto Enrol']].map(([v,n])=>`<option value="${v}" ${g.mode===v?'selected':''}>${n}</option>`).join('')}</select><small>Auto Accept approves an application immediately. Auto Enrol adds eligible pilots without an application and rechecks their requirements. A manual rejection prevents automatic re-enrolment.</small></label><fieldset><legend>Requirements · All On One Pilot</legend><small>Choose corporation membership, a ship, skill, corporation role or title. Auto Enrol needs at least one requirement. All conditions must match one pilot. Corporation membership is checked every five minutes; skills, assets, roles and titles require successful snapshots within 24 hours.</small>${choices.error?`<small class="corp-warning">${esc(choices.error)}</small>`:""}<div id="group-rules">${g.rules.map(ruleInputs).join('')}</div><button type="button" data-rule-add>Add Condition</button></fieldset></div><fieldset class="group-editor-permissions"><legend>Group Permissions</legend><label class="group-permission"><input type="checkbox" name="create_events" ${g.create_events?'checked':''}><span><strong>Create calendar events</strong><small>Approved members can open Operations Calendar and add shared events.</small></span></label><label class="group-permission"><input type="checkbox" name="create_timers" ${g.create_timers?'checked':''}><span><strong>Create timers and targets</strong><small>Applies to approved members who can access the Timerboard plugin.</small></span></label><h3>Corporation Pages</h3><small>Choose which corporation pages approved members can view.</small>${Object.entries(d.pages).map(([id,name])=>`<label class="group-permission"><input name="pages" type="checkbox" value="${id}" ${g.pages.includes(id)?'checked':''}><span><strong>${esc(name)}</strong><small>${esc(CORPORATE_PAGE_DESCRIPTIONS[id]||'View this corporation page.')}</small></span></label>`).join('')}<h3>Management</h3>${Object.entries(d.management_pages||{}).map(([id,name])=>`<label class="group-permission"><input name="pages" type="checkbox" value="${id}" ${g.pages.includes(id)?'checked':''}><span><strong>${esc(name)}</strong><small>Review applicants and inspect their linked pilots. Does not grant inspection of ordinary member accounts.</small></span></label>`).join('')}</fieldset><div class="actions"><button class="primary">Save Group</button><button type="button" data-group-new>New Group</button></div></form></section><section class="panel compact">${table(['Group','Mode','Recruits','Actions'],groups.map(g=>`<tr><td>${esc(g.icon)} ${esc(g.name)}${g.hidden?' · Hidden':''}</td><td>${esc(g.mode)}</td><td>${g.recruit_visible?'Visible':'Hidden'}</td><td><button data-group-edit="${g.id}">Edit</button> <button data-group-delete="${g.id}">Delete</button></td></tr>`))}</section>`;
+  }
+  if(page==='admin-links'){
+   links=await api('/admin/links');return intro('Links','External links appear in the Links section below My Characters.')+`<section class="panel compact"><h2>Add Link</h2><form id="external-link-form" class="management-form"><input name="id" type="hidden"><label>Name<input name="name" required maxlength="80"></label><label>Description<input name="description" maxlength="1000"></label><label>URL<input name="url" required placeholder="google.com or https://google.com"><small>Destinations without a scheme use HTTPS.</small></label><label>Site Short Path · Optional<input name="slug" maxlength="60" placeholder="Google"><small>${esc(location.origin)}/Google redirects to this link. Leave blank for a direct link.</small></label><button class="primary">Save Link</button></form></section><section class="panel compact">${table(['Name','Description','Destination','Sidebar','Actions'],links.map(l=>`<tr><td>${esc(l.name)}</td><td>${esc(l.description)}</td><td><a href="${esc(l.slug?'/'+l.slug:l.url)}" target="_blank" rel="noopener noreferrer">${l.slug?esc(location.origin+'/'+l.slug):'Open ↗'}</a></td><td><span class="polish-tag">Links</span><small>Signed-in members</small></td><td><button data-link-edit="${l.id}">Edit</button> <button data-link-delete="${l.id}">Delete</button></td></tr>`))}</section>`;
+  }
+  if(page==='inspect-mail'||page==='inspect-contacts'){
+   if(!me.inspect)return empty('Inspect access required');
+   const kind=page==='inspect-mail'?'mail':'contacts';if(!chars.some(c=>c.id===inspectPilot))inspectPilot=chars[0]?.id;
+   const picker=`<label>Character <select id="inspect-pilot">${chars.map(c=>`<option value="${c.id}" ${c.id===inspectPilot?'selected':''}>${esc(c.name)}</option>`).join('')}</select></label>`;
+   const header=intro(kind==='mail'?'Mail':'Contacts','Inspect Only · read-only access to the selected pilot.')+picker;
+   if(!inspectPilot)return header+empty('No linked characters');
+   let d;try{d=await api('/inspect/'+kind+'?'+new URLSearchParams({character:inspectPilot,...(kind==='contacts'?{page:contactPage}:mailId?{mail:mailId}:mailBefore?{before:mailBefore}:{})}));}catch(e){return header+notice(e.message);}
+   if(mailId&&kind==='mail')return header+`<section class="panel compact"><button data-mail-back>← Mail</button><h2>${esc(d.subject)}</h2><div class="mail-addresses"><div><strong>From:</strong> ${mailFrom(d,d.names)}</div><div><strong>To:</strong> ${mailTo(d,d.names)}</div><div><strong>Date:</strong> ${date(d.timestamp)}</div></div><div class="mail-body">${esc(String(d.body||'').replace(/<br\s*\/?\s*>/gi,'\n').replace(/<[^>]*>/g,''))}</div></section>`;
+   if(kind==='contacts')return header+table(['Contact','Type','Standing','Watched','Blocked'],d.rows.map(r=>`<tr><td>${esc(d.names[r.contact_id]||r.contact_id)}</td><td>${esc(r.contact_type)}</td><td>${num(r.standing)}</td><td>${r.is_watched?'Yes':'No'}</td><td>${r.is_blocked?'Yes':'No'}</td></tr>`))+`<div class="actions"><button data-contact-step="-1" ${contactPage<=1?'disabled':''}>Previous</button><span>${contactPage} / ${d.pages}</span><button data-contact-step="1" ${contactPage>=d.pages?'disabled':''}>Next</button></div>`;
+   return header+table(['Date','From','To','Subject',''],d.rows.map(r=>`<tr><td>${date(r.timestamp)}</td><td>${mailFrom(r,d.names)}</td><td class="mail-recipients">${mailTo(r,d.names)}</td><td>${esc(r.subject)}</td><td><button data-mail-open="${r.mail_id}">Read</button></td></tr>`))+`<div class="actions"><button data-mail-reset>Newest</button>${d.rows.length?`<button data-mail-older="${Math.min(...d.rows.map(r=>r.mail_id))}">Older</button>`:''}</div>`;
+  }
+  if(page==='corp-members'){
+   const d=await api('/corporation/members'),groups=memberGroups(d.rows,memberSort,memberGrouped),people=new Set(d.rows.map(r=>r.account_main_id).filter(Boolean)).size,unknown=d.rows.filter(r=>!r.account_main_id).length;
+   return intro('Memberlist','Corporation pilots and their last reported activity. Group registered characters by their Tools account.')+notice(d.error)+`<div class="compact-stats"><div><small>Total Pilots</small><strong>${d.rows.length}</strong></div><div><small>Mains · Registered People</small><strong>${people}</strong></div><div><small>Unregistered Pilots</small><strong>${unknown}</strong></div></div><div class="toolbar"><label>Order By <select id="member-sort">${[['last_active','Last Active · Newest First'],['name','Pilot Name'],['ship','Ship'],['location','Location'],['registered','Site Registration']].map(([v,n])=>`<option value="${v}" ${memberSort===v?'selected':''}>${n}</option>`).join('')}</select></label><label class="inline"><input type="checkbox" id="member-group" ${memberGrouped?'checked':''}> Group Registered Accounts</label><small>${d.updated?'Checked '+date(d.updated):'No data available'}</small></div><section class="panel compact memberlist-table">${table(['Pilot','Last Active','Last Ship','Last Location','Site'],groups.map(g=>(memberGrouped?`<tr class="member-account-head"><td colspan="5">${face(g.main_id,g.name)} <span>${g.rows.length} corp pilot${g.rows.length===1?'':'s'}</span></td></tr>`:'')+g.rows.map(r=>`<tr><td>${face(r.id,r.name)}</td><td>${r.last_active?date(r.last_active):'Unavailable'}</td><td>${esc(r.ship||'Unavailable')}</td><td>${esc(r.location||'Unavailable')}</td><td>${r.signed_up?'✓ Registered':'Not Registered'}</td></tr>`).join('')))}</section><small>Mains counts distinct registered people, including owners whose login main is outside this corporation. Ownership of unregistered pilots is unknown.</small>`;
+  }
+  if(page==='corp-overview'){
+   const d=await api('/corporation/overview'),c=d.corporation;return intro('Corporation Overview','Corporation · membership and combat overview')+(c?`<section class="panel compact"><h2>${esc(c.name)} [${esc(c.ticker)}]</h2><div class="corp-totals"><span>${num(c.member_count)} members · ESI</span><span>${num(c.tax_rate*100)}% tax</span><span>Founded ${date(c.date_founded)}</span></div></section>`:'')+`<div class="management-grid">${source('Dotlan','https://evemaps.dotlan.net/corp/'+encodeURIComponent((me.installation?.corporationName||'Corporation').replaceAll(' ','_')),d.dotlan,x=>`<div class="production"><span>Members</span><strong>${num(x.members)}</strong></div><div class="production"><span>Alliance</span><strong>${esc(x.alliance)}</strong></div><div class="production"><span>CEO</span><strong>${esc(x.ceo)}</strong></div>`)}${source('zKillboard','https://zkillboard.com/corporation/'+Number(me.installation?.corporationId)+'/',d.zkill,x=>`<div class="production"><span>Ships Destroyed</span><strong>${num(x.shipsDestroyed)}</strong></div><div class="production"><span>Ships Lost</span><strong>${num(x.shipsLost)}</strong></div><div class="production"><span>ISK Destroyed</span><strong>${currency(x.iskDestroyed)}</strong></div><div class="production"><span>ISK Lost</span><strong>${currency(x.iskLost)}</strong></div><small>Recorded zKillboard totals; coverage may be incomplete.</small>`)}${source('Eve Who','https://evewho.com/corporation/'+Number(me.installation?.corporationId),d.evewho,x=>['joiners','leavers'].map(k=>`<h3>Last 10 ${k==='joiners'?'Joiners':'Leavers'}</h3>${x[k].map(r=>`<div class="production"><strong>${esc(r.name)}</strong><small>${esc(r.detail)}</small></div>`).join('')||'<small>Unavailable</small>'}`).join(''))}</div>`;
+  }
+  return null;
+ }
+ function ruleLabel(r){if(r.kind==='corporation')return esc(r.name||'Corporation Member');if(['role','title'].includes(r.kind))return esc((r.kind==='role'?'Role: ':'Title: ')+plainEveText(r.name||r.id));return esc(r.kind==='skill'?`${r.name||'Skill '+r.id} · Level ${r.level}`:r.kind==='ship-type'?`Own ${r.name||'Ship '+r.id}`:r.id===30?'Own A Titan':r.id===485?'Own A Dreadnought':`Own Ship Group ${r.id}`);}
+ function conditionOptions(kind){const list=kind==='role'?(conditionChoices.roles||[]).map(id=>({id,name:id.replaceAll('_',' ')})):kind==='title'?(conditionChoices.titles||[]).map(t=>({id:t.id,name:plainEveText(t.name)})):[];return list.map(x=>`<option value="${esc(x.name)}" data-id="${esc(x.id)}"></option>`).join('');}
+ let ruleSerial=0;
+ function ruleInputs(r={kind:'ship-group',id:30,level:5}){
+  const preset=r.kind==='ship-group'?'group:'+r.id:r.kind,serial=++ruleSerial;
+  return `<div class="rule-row"><select data-rule-kind aria-label="Condition type">${[['group:30','Own A Titan'],['group:485','Own A Dreadnought'],['ship-type','Own A Specific Ship'],['skill','Trained Skill'],['role','Corporation Role'],['title','Corporation Title'],['corporation','Member of Site Corporation']].map(([v,n])=>`<option value="${v}" ${v===preset?'selected':''}>${n}</option>`).join('')}</select><span><input data-rule-search list="rule-options-${serial}" aria-label="Search condition by name" placeholder="Search by name" value="${esc(r.name||'')}" ${['ship-group','corporation'].includes(r.kind)?'hidden':''}><datalist id="rule-options-${serial}">${conditionOptions(r.kind)}</datalist><input type="hidden" data-rule-id value="${r.kind==='corporation'?conditionChoices.corporation_id:r.id}"></span><select data-rule-level aria-label="Skill level" ${r.kind!=='skill'?'hidden':''}>${[1,2,3,4,5].map(n=>`<option ${r.level===n?'selected':''}>${n}</option>`).join('')}</select><button type="button" data-rule-remove>Remove</button></div>`;
+ }
+ document.addEventListener('input',async e=>{
+  if(e.target.id==='group-member-search'){groupSearch=e.target.value;document.getElementById('group-membership-results').innerHTML=groupMembershipView(groupManagementData,groupSearch,esc,ruleLabel);return;}
+  if(!e.target.hasAttribute('data-rule-search'))return;
+  const row=e.target.closest('.rule-row'),kind=row.querySelector('[data-rule-kind]').value,q=e.target.value;
+  row.querySelector('[data-rule-id]').value='';
+  const chosen=[...row.querySelectorAll('datalist option')].find(o=>o.value===q);
+  if(chosen){row.querySelector('[data-rule-id]').value=chosen.dataset.id;return;}
+  if(['role','title'].includes(kind)||q.length<2)return;
+  try{const found=await api('/catalog?q='+encodeURIComponent(q)+(kind==='skill'?'&skills=1':''));if(e.target.value!==q)return;row.querySelector('datalist').innerHTML=found.filter(x=>x.category_id===(kind==='skill'?16:6)).map(x=>`<option value="${esc(x.name)}" data-id="${x.id}"></option>`).join('');}catch{}
+ });
+ document.addEventListener('change',async e=>{
+  try{
+   if(e.target.hasAttribute('data-rule-kind')){const row=e.target.closest('.rule-row'),kind=e.target.value;row.querySelector('[data-rule-search]').hidden=kind.startsWith('group:')||kind==='corporation';row.querySelector('[data-rule-level]').hidden=kind!=='skill';row.querySelector('[data-rule-id]').value=kind.startsWith('group:')?kind.split(':')[1]:kind==='corporation'?conditionChoices.corporation_id:'';row.querySelector('[data-rule-search]').value='';row.querySelector('datalist').innerHTML=conditionOptions(kind);}
+   if(e.target.id==='settings-theme'){await setTheme(e.target.value);toast('Theme saved.');}
+   if(e.target.id==='settings-font-size'){e.target.disabled=true;await api('/settings',{font_size:e.target.value});await refresh(true);toast('Font size saved.');}
+   if(e.target.id==='sidebar-font-size'){e.target.disabled=true;await api('/settings',{sidebar_font_size:Number(e.target.value)});await refresh(true);toast('Side panel font size saved.');}
+   if(e.target.dataset.pageToggle){const id=e.target.dataset.pageToggle,value=e.target.checked;e.target.disabled=true;await api('/settings',{[id]:value});context().me.preferences[id]=value;if(Object.hasOwn(notificationOptions,id)){e.target.disabled=false;await refreshAlerts();}else await refresh(true);}
+   if(e.target.id==='member-sort'){memberSort=e.target.value;await refresh();}
+   if(e.target.id==='member-group'){memberGrouped=e.target.checked;await refresh();}
+   if(e.target.name==='period'&&e.target.closest('#ratting-filter')){for(const input of e.target.form.querySelectorAll('input[type=date]'))input.disabled=e.target.value!=='custom';}
+   if(e.target.id==='inspect-pilot'){inspectPilot=Number(e.target.value);contactPage=1;mailBefore=null;mailId=null;await refresh();}
+  }catch(error){toast(error.message);await refresh();}
+ });
+ document.addEventListener('keydown',e=>{const tab=e.target.closest('[data-groups-tab],[data-settings-tab]');if(!tab||!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();const tabs=[...tab.parentElement.querySelectorAll('[role=tab]')],i=tabs.indexOf(tab);tabs[e.key==='Home'?0:e.key==='End'?tabs.length-1:(i+(e.key==='ArrowRight'?1:tabs.length-1))%tabs.length]?.click();});
+ document.addEventListener('click',async e=>{
+  const b=e.target.closest('button');if(!b)return;
+  try{
+   if(b.dataset.settingsTab){
+    settingsTab=b.dataset.settingsTab;
+    const page=b.closest('.settings-tabs-page');
+    for(const tab of page.querySelectorAll('[data-settings-tab]')){
+     const selected=tab===b;
+     tab.setAttribute('aria-selected',String(selected));
+     tab.tabIndex=selected?0:-1;
+     tab.classList.toggle('primary',selected);
+     document.getElementById(tab.getAttribute('aria-controls')).hidden=!selected;
+    }
+    b.focus();
+    return;
+   }
+   if(b.dataset.groupsTab&&groupTabs.some(([id])=>id===b.dataset.groupsTab)){groupsTab=b.dataset.groupsTab;document.getElementById('groups-directory').innerHTML=groupsDirectoryView(groups,{me:context().me,tab:groupsTab,esc,ruleLabel});document.getElementById('group-tab-'+groupsTab)?.focus();return;}
+   if(b.dataset.rattingAction==='alts'){rattingFilters.alts=!rattingFilters.alts;saveRatting();await refresh();}
+   if(b.dataset.rattingAction==='clear'){rattingFilters=rattingPreferences();rattingOffset=0;saveRatting();await refresh();}
+   if(b.dataset.rattingOffset!==undefined){rattingOffset=Math.max(0,Number(b.dataset.rattingOffset)||0);await refresh();}
+   if(b.dataset.rattingAction==='export'){const rows=rattingAnalysis(rattingPilots,context().chars,rattingFilters).rows,url=URL.createObjectURL(new Blob([rattingCSV(rows)],{type:'text/csv;charset=utf-8'})),link=document.createElement('a');link.href=url;link.download='tools-ratting-payouts.csv';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+
+   if(b.hasAttribute('data-rule-add')){document.getElementById('group-rules').insertAdjacentHTML('beforeend',ruleInputs());return;}
+   if(b.hasAttribute('data-rule-remove')){b.closest('.rule-row').remove();return;}
+   if(b.dataset.groupEdit){editing=Number(b.dataset.groupEdit);await refresh();}
+   if(b.hasAttribute('data-group-new')){editing=null;await refresh();}
+   if(b.dataset.groupDelete){if(!confirm('Delete this group and its memberships?'))return;await api('/admin/groups/'+b.dataset.groupDelete,{},'DELETE');editing=null;await refresh(true);}
+   if(b.dataset.groupLeave){
+    if(!confirm('Leave this group?'))return;
+    await api('/groups/'+b.dataset.groupLeave+'/leave',{});await refresh(true);
+   }
+   if(b.dataset.groupApply){await api('/groups/'+b.dataset.groupApply+'/apply',{});await refresh(true);}
+   if(b.dataset.groupDecision){await api('/admin/groups/'+b.dataset.groupDecision+'/member',{user_id:Number(b.dataset.user),status:b.dataset.status});await refresh();}
+   if(b.dataset.linkEdit){const l=links.find(l=>l.id===Number(b.dataset.linkEdit)),f=document.getElementById('external-link-form');for(const k of ['id','name','description','url','slug'])f.elements[k].value=l[k];f.scrollIntoView({block:'nearest'});}
+   if(b.dataset.linkDelete){if(!confirm('Remove this link?'))return;await api('/admin/links/'+b.dataset.linkDelete,{},'DELETE');await refresh(true);}
+   if(b.dataset.mailOpen){mailId=Number(b.dataset.mailOpen);await refresh();}
+   if(b.hasAttribute('data-mail-back')){mailId=null;await refresh();}
+   if(b.dataset.mailOlder){mailBefore=b.dataset.mailOlder;await refresh();}
+   if(b.hasAttribute('data-mail-reset')){mailBefore=null;await refresh();}
+   if(b.dataset.contactStep){contactPage+=Number(b.dataset.contactStep);await refresh();}
+  }catch(error){toast(error.message);}
+ });
+ document.addEventListener('submit',async e=>{
+  const formId=e.target.getAttribute('id');
+  if(formId==='ratting-filter'){e.preventDefault();try{const next=rattingPreferences({...rattingFilters,...Object.fromEntries(new FormData(e.target))});rattingBounds(next);rattingFilters=next;rattingOffset=0;saveRatting();await refresh();}catch(error){toast(error.message);}return;}
+
+  if(formId==='group-member-add-form'){
+   e.preventDefault();const f=new FormData(e.target),option=[...e.target.querySelectorAll('datalist option')].find(o=>o.value===f.get('pilot')),button=e.target.querySelector('button');
+   if(!option){toast('Choose a registered pilot from the search results.');return;}button.disabled=true;
+   try{await api('/admin/groups/'+Number(f.get('group'))+'/member',{user_id:Number(option.dataset.userId),status:'approved'});await refresh(true);toast('Group member added.');}catch(error){toast(error.message);}finally{button.disabled=false;}return;
+  }
+  if(!['access-group-form','external-link-form'].includes(formId))return;e.preventDefault();
+  const f=new FormData(e.target),body=Object.fromEntries(f);
+  if(formId==='access-group-form'){
+   body.id=editing;if(e.target.elements.discord_notify)body.discord_notify=f.has('discord_notify');body.create_events=f.has('create_events');body.create_timers=f.has('create_timers');delete body.group_image;delete body.remove_image;body.hidden=f.has('hidden');body.recruit_visible=f.has('recruit_visible');body.pages=f.getAll('pages');body.rules=[...e.target.querySelectorAll('.rule-row')].map(row=>({kind:row.querySelector('[data-rule-kind]').value.startsWith('group:')?'ship-group':row.querySelector('[data-rule-kind]').value,id:row.querySelector('[data-rule-kind]').value==='role'?row.querySelector('[data-rule-id]').value:Number(row.querySelector('[data-rule-id]').value),name:row.querySelector('[data-rule-search]').value,level:Number(row.querySelector('[data-rule-level]').value)}));
+  }
+  const button=e.target.querySelector('button.primary');button.disabled=true;
+  try{
+   if(formId==='access-group-form'){
+    const file=f.get('group_image');
+    if(file?.size)body.image=await readGroupImage(file);
+    else if(f.has('remove_image'))body.image=null;
+   }
+   await api(formId==='access-group-form'?'/admin/groups':'/admin/links',body);editing=null;await refresh(true);toast(formId==='external-link-form'?'Link saved.':'Group saved.');}catch(error){toast(error.message);}finally{button.disabled=false;}
+ });
+ return {render};
+}

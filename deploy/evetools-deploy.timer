@@ -1,0 +1,8 @@
+[Unit]
+Description=Optional EveTools main-branch update checks
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=2min
+Unit=evetools-deploy.service
+[Install]
+WantedBy=timers.target

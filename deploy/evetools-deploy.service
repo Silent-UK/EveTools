@@ -1,0 +1,8 @@
+[Unit]
+Description=Validate and deploy an EveTools release
+After=network-online.target
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/evetools-deploy
+TimeoutStartSec=15min
+UMask=0077

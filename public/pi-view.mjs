@@ -1,0 +1,55 @@
+const planetTypes={temperate:11,ice:12,gas:13,oceanic:2014,lava:2015,barren:2016,storm:2017,plasma:2063,shattered:30889};
+export function piPlanetTypeId(planet){
+ return planet.info?.type_id||planetTypes[planet.planet_type]||11;
+}
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const num=v=>v==null?'—':Number(v).toLocaleString(undefined,{maximumFractionDigits:0});
+const volume=v=>v==null?'Unavailable':Number(v).toLocaleString(undefined,{maximumFractionDigits:2})+' m³';
+const icon=id=>`<img class="eve-icon" src="https://images.evetech.net/types/${Number(id)}/icon?size=64" alt="" loading="lazy">`;
+export function extractionRows(p,settings){
+ return p.production.filter(r=>r.kind==='Extractor').map(r=>{
+   const stopped=r.expires&&Date.parse(r.expires)<=Date.now(),rate=r.averagePerHour;
+   const quality=rate==null?'unknown':rate>=settings.perfect?'perfect':rate<settings.critical?'critical':'attention';
+   const label=stopped?'Reset needed':({unknown:'Rate unavailable',perfect:'Perfect',critical:'Critical',attention:'Requires attention'})[quality];
+   return `<div class="pi-extractor ${stopped?'stopped':quality}" data-extractor-expiry="${esc(r.expires||'')}" aria-label="${esc(r.name)}: ${label}" title="${rate==null?'Programme dates or output unavailable':`${num(r.programmeTotal)} units over ${Number(r.programmeHours).toLocaleString(undefined,{maximumFractionDigits:2})} hours · programme average`}"><div><span>${esc(r.name)}</span><strong>${num(rate==null?null:Math.floor(rate))}/hr</strong></div><small class="pi-extractor-state" ${!stopped&&quality!=='unknown'?'hidden':''}>${label}${stopped&&rate!==null?' · last programme':''}</small></div>`;
+ }).join('');
+}
+export function piDashboardView(data){
+ if(!data.targets.length)return '<div class="pi-setup"><span>Select P3/P4 targets to see your stock, potential output and Jita value.</span><button data-action="pi-settings">Choose products</button></div>';
+ return `<div class="pi-overview-head"><div><strong>Production goals</strong><small>${data.partial?'Partial stock · some characters need a successful sync':'Stock across all linked characters'} · launchpads, storage and command centres</small></div></div><div class="pi-goals">${data.targets.map((t,index)=>`<article class="pi-goal"><div class="pi-goal-title"><span class="icon-label">${icon(t.id)}<strong>${esc(t.name)}</strong></span><small>P${t.tier} · Priority ${index+1}</small></div><div class="pi-ingredients">${t.ingredients.map(i=>`<div><span class="icon-label">${icon(i.id)}${esc(i.name)}</span><strong>${num(i.stored)}</strong><small>${i.available!==i.stored?num(i.available)+' available after earlier targets':i.quantity+' per batch'}</small></div>`).join('')}</div><div class="pi-result"><div><small>Already stored</small><strong>${num(t.existing)}</strong></div><div><small>If combined · additional</small><strong class="pi-potential">${num(t.additional)}</strong></div><div><small>Combined volume</small><strong>${volume(t.combined_m3)}</strong></div><div><small>Combined value</small><strong data-pi-value="${t.id}">Checking…</strong></div></div><small data-pi-price="${t.id}"></small></article>`).join('')}</div>`;
+}
+export function piTargetList(ids,products){
+ return ids.length?ids.map((id,i)=>`<div class="pi-target-row"><span>${i+1}. ${esc(products.find(p=>p.id===id)?.name||id)}</span><button type="button" data-pi-move="${i}" data-direction="-1" ${i===0?'disabled':''} aria-label="Move target ${i+1} up">↑</button><button type="button" data-pi-move="${i}" data-direction="1" ${i===ids.length-1?'disabled':''} aria-label="Move target ${i+1} down">↓</button><button type="button" data-pi-remove="${id}" aria-label="Remove ${esc(products.find(p=>p.id===id)?.name||id)}">×</button></div>`).join(''):'<small>No end products selected.</small>';
+}
+export function piSettingsView(data){
+ return `<h2>Planetary industry settings</h2><form id="pi-settings"><h3>Extraction levels · average units/hour</h3><div class="pi-thresholds"><label>Perfect from<input type="number" name="perfect" min="1" max="100000000" step="1" required value="${data.settings.perfect}"></label><label>Critical below<input type="number" name="critical" min="0" max="99999999" step="1" required value="${data.settings.critical}"></label></div><small>Green at or above Perfect; amber between the thresholds; red below Critical. Stopped extractors always show Reset needed.</small><h3>Production Goals</h3><label class="pi-goals-toggle"><input type="checkbox" name="show_goals" ${data.settings.show_goals!==false?'checked':''}> Show Production Goals on the PI page</label><small>Hiding goals keeps your selected products and their priority order.</small><h3>P3 / P4 end products</h3><div class="formrow"><select id="pi-product-select" aria-label="End product">${data.products.map(p=>`<option value="${p.id}">${esc(p.name)} · P${p.tier}</option>`).join('')}</select><button type="button" data-pi-add="1">Add product</button></div><div id="pi-target-list">${piTargetList(data.settings.targets,data.products)}</div><p class="muted">Up to 8 targets. Priority runs from top to bottom when ingredients are shared. Settings apply to all your linked characters.</p><button class="primary" type="submit">Save settings</button><small id="pi-settings-error" role="status"></small></form>`;
+}
+
+export function launchpadRows(planet){
+ const pads=planet.launchpads||planet.storage?.filter(s=>s.kind==='Launchpad')||[];
+ const volume=n=>Number(n).toLocaleString('en-GB',{maximumFractionDigits:2});
+ return pads.map((pad,i)=>{const u=pad.usage,known=u&&Number.isFinite(u.used);return `<div class="pi-launchpad"><span>Launchpad${pads.length>1?' '+(i+1):''}</span><strong class="${known?'corp-'+u.level:'muted'}" title="${known?volume(u.freePercent)+'% free · last EVE snapshot':'Stored item volume unavailable'}">${known?volume(u.used)+' m³ / '+volume(u.capacity)+' m³':'Volume unavailable'}</strong></div>`;}).join('');
+}
+
+export function piPlanetStatuses(planet,settings,now=Date.now()) {
+ const flags=new Set();
+ for(const r of planet.production||[]) {
+  if(r.kind!=='Extractor')continue;
+  if(r.status==='Stopped'||(r.expires&&Date.parse(r.expires)<=now)){flags.add('stopped');continue;}
+  if(!(r.expires&&Date.parse(r.expires)>now))continue;
+  if(!Number.isFinite(r.averagePerHour))continue;
+  if(r.averagePerHour<settings.critical)flags.add('critical');
+  else if(r.averagePerHour<settings.perfect)flags.add('attention');
+ }
+ if(piStorageAttention(planet))flags.add('storage');
+ return [...flags];
+}
+export function piViewPreferences(raw={}){const p=raw&&typeof raw==='object'?raw:{};return {q:typeof p.q==='string'?p.q.slice(0,150):'',statuses:Array.isArray(p.statuses)?[...new Set(p.statuses.filter(s=>['stopped','attention','critical','storage'].includes(s)))]:[],alts:p.alts===true};}
+export function piStorageAttention(planet){return (planet.launchpads||planet.storage?.filter(s=>s.kind==='Launchpad')||[]).some(p=>Number.isFinite(p.usage?.used)&&Number.isFinite(p.usage?.capacity)&&p.usage.capacity>0&&p.usage.used>=p.usage.capacity*.75);}
+export function piSearchText(planet,pilot=''){return [pilot,planet.systemName,planet.info?.name,planet.planet_id,planet.planet_type,...(planet.production||[]).map(p=>p.name),...(planet.finalProducts||[]).map(p=>p.name),...(planet.storage||[]).flatMap(s=>(s.contents||[]).map(i=>i.name))].filter(v=>v!=null).join(' ').toLowerCase();}
+export function piMatches(text,statuses,preferences){return (!preferences.q.trim()||text.includes(preferences.q.trim().toLowerCase()))&&(!preferences.statuses.length||preferences.statuses.some(s=>statuses.includes(s)));}
+export function piSnapshotNotice(pilot,now=Date.now()){
+ const updated=Number(pilot.updated),missing=!Number.isFinite(updated)||updated<=0,stale=missing||now-updated>7200000||!!pilot.error;
+ const label=missing?'PI not yet synced':pilot.error?'Latest PI refresh failed · saved snapshot shown':stale?'PI snapshot over 2 hours old · status unconfirmed':'Saved PI snapshot';
+ return `<small class="pi-snapshot-note ${stale?'pi-snapshot-warning':''}" title="Production rates and stored quantities reflect the last successful PI sync. Reset timers follow saved programme dates.">${esc(label)}${!missing?' · '+esc(new Date(updated).toLocaleString('en-GB',{timeZone:'UTC'}))+' UTC':''}</small>`;
+}
