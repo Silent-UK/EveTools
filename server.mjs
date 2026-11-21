@@ -412,7 +412,7 @@ export function createApp(config) {
   sitePageRoutes(app,{db,config});
   discordRoutes(app,{discord,config});
   const marketPI=jitaPricing(db,eve,true);
-  const services=servicePluginRoutes(app,{db,config,cat,jitaQuotes:marketPI,contracts:()=>corp.contracts({ttl:300000})});
+  const services=servicePluginRoutes(app,{db,config,cat,jitaQuotes:marketPI,contracts:()=>corp.contracts({ttl:300000}),structures:()=>corp.snapshot()});
   const servicePluginStates=async req=>({...services.pluginStates(req),timerboard:await timerboard.visible(req)});
   db.exec('CREATE TABLE IF NOT EXISTS contributor_groups (kind TEXT PRIMARY KEY, group_id INTEGER NOT NULL REFERENCES access_groups(id) ON DELETE CASCADE)');
   const contributorGroup=db.prepare('SELECT group_id FROM contributor_groups WHERE kind=?');

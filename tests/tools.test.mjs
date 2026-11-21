@@ -3179,3 +3179,18 @@ test('Logistics courier claims are exclusive, completion is owned and ESI verifi
  status='finished';row=(await list(other))[0];assert.equal(row.verified,true);assert.equal(row.workflowStatus,'completed');
  assert.equal((await post('/api/logistics/couriers/999',a,{action:'claim'})).status,404);
 }));
+
+
+test('Logistics location search is admin-only and uses corporation snapshots plus known courier locations',()=>fixture(async({db,user,request,corp})=>{
+ const owner=user(100,'Owner'),member=user(981,'Member');
+ await request('/api/admin/service-plugins/logistics',{session:owner.session,method:'POST',body:{enabled:true}});
+ corp.snapshot=()=>({updated:123,structures:[{id:1000000000081,name:'Example - Docking Structure',system:'Example',kind:'Structure',type_name:'Keepstar'}]});
+ assert.equal((await request('/api/logistics/locations?q=Example',{session:member.session})).status,403);
+ assert.equal((await request('/api/logistics/locations?q=x',{session:owner.session})).status,400);
+ const data=await(await request('/api/logistics/locations?q=Example',{session:owner.session})).json();assert.equal(data.results[0].id,1000000000081);assert.equal(data.results[0].name,'Example - Docking Structure');assert.equal(data.structuresUpdated,123);
+ const station=await(await request('/api/logistics/locations?q=Jita%204-4',{session:owner.session})).json();assert.ok(station.results.some(r=>r.id===60003760));
+ db.prepare('INSERT INTO public_cache VALUES(?,?,?)').run('/tools/corp-data/contracts',JSON.stringify({locations:{1000000000082:'Example Courier Citadel'}}),Date.now()+3600000);
+ const cached=await(await request('/api/logistics/locations?q=Courier',{session:owner.session})).json();assert.ok(cached.results.some(r=>r.id===1000000000082));
+ await request('/api/admin/service-plugins/logistics',{session:owner.session,method:'POST',body:{enabled:false}});
+ assert.equal((await request('/api/logistics/locations?q=Example',{session:owner.session})).status,403);
+}));

@@ -1,3 +1,4 @@
+import {searchLogisticsLocations} from '../lib/logistics-locations.mjs';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {logisticsDefaults,logisticsSettings,logisticsQuote,courierQueue} from '../lib/logistics.mjs';
@@ -25,4 +26,10 @@ test('directional isotope pricing charges only fuel and never scales with cargo 
  assert.throws(()=>logisticsQuote(s,{from:'B',to:'A',space:'nullsec',volume:1,collateral:0}),/No isotope cost/);
  assert.throws(()=>logisticsSettings({...s,routes:[...s.routes,...s.routes]}),/unique/);
  assert.throws(()=>logisticsSettings({...s,routes:[{...s.routes[0],isotopes:-1}]}));
+});
+
+test('location search returns NPC IDs and aliases, deduplicates known structures and excludes non-dockable assets',()=>{
+ const found=searchLogisticsLocations('jita 4-4');assert.ok(found.results.some(r=>r.id===60003760&&r.name==='Jita IV - Moon 4 - Caldari Navy Assembly Plant'));
+ const input={npcStations:[],structures:[{id:1000000000001,name:'Example - Dock',system:'Example',kind:'Structure',type_name:'Keepstar'},{id:1000000000002,name:'Example Moon Drill',kind:'Moon Drill'}],locations:{1000000000001:'Older name',2004:'Asset Safety',30000142:'A system'}};
+ assert.equal(searchLogisticsLocations('Example',input).total,1);assert.equal(searchLogisticsLocations('Older',input).results[0].id,1000000000001);assert.equal(searchLogisticsLocations('1000000000001',input).results.length,1);assert.equal(searchLogisticsLocations('Moon Drill',input).total,0);
 });

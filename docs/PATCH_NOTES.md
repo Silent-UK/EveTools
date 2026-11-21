@@ -1,3 +1,9 @@
+# EveTools v1.0.0 - Logistics location finder
+
+- Search synced corporation structures, known courier locations, configured locations and public NPC stations from Logistics Admin.
+- Select a result to fill its name and numeric location ID automatically, enriching existing rows instead of duplicating them.
+- Support station aliases such as Jita 4-4; keep manual entry for unknown private structures and preserve admin-only settings access.
+
 # EveTools v1.0.0 - Isotope courier pricing and hauler workflow
 
 - Configure directional isotope quantities and ISK-per-isotope costs. Isotope mode calculates the courier reward from fuel only, without a volume surcharge or site quote request.
