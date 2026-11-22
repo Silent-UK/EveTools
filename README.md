@@ -1,3 +1,5 @@
+> **Interactive demo branch:** fictional data, no SSO and full admin exploration. See [Demo setup](docs/DEMO.md). This is separate from the public 1.0.0 release.
+
 # EveTools
 
 **Your pilots. Your corporation. One command centre.**

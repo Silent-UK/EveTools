@@ -1,0 +1,34 @@
+[Unit]
+Description=EveTools public fictional demo
+After=network.target
+
+[Service]
+Type=simple
+DynamicUser=yes
+WorkingDirectory=/opt/evetools-demo/current
+Environment=NODE_ENV=production
+Environment=DEMO_BASE_URL=https://demo.areyouaspy.co.uk
+Environment=DEMO_PORT=3020
+Environment=DEMO_CATALOG_DIR=/opt/evetools-demo/catalog
+ExecStart=/usr/bin/node /opt/evetools-demo/current/lib/demo-server.mjs
+Restart=on-failure
+RestartSec=5
+MemoryMax=512M
+CPUQuota=100%
+TasksMax=64
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallFilter=~connect
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

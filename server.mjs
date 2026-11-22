@@ -187,7 +187,7 @@ export function createApp(config) {
     req.session={...req.session,user_id:target.id,name:target.name,main_id:target.main_id,admin:0};
     next();
   });
-  app.get("/health", (_req, res) => res.json({ ok: true, version: "1.0.0" }));
+  app.get("/health", (_req, res) => res.json({ ok: true, version: "1.0.0-demo.1" }));
   app.use((req,res,next)=>{if(config.corporationId!==installation.read().corporationId&&(req.path.startsWith('/api/corporation')||req.path==='/auth/login'||req.path==='/auth/callback'))return res.status(503).json({error:'Restart Tools to activate the saved corporation identity before connecting or syncing.'});next();});
   app.get("/auth/login", (req, res) => {
     if (!config.client || !config.secret)
