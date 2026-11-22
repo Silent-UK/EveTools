@@ -4,16 +4,32 @@ export function discordUI({api,esc,intro,date,refresh,toast,context}){
  function publishingForm(data,active){
   const board=active==='timerboard';
   const keys=board?['timerboard']:Object.keys(data.labels).filter(key=>key!=='timerboard');
-  const destinations=keys.map(key=>{
+  const destination=key=>{
    const row=data.destinations[key];
    return `<div class="discord-destination"><label><input class="slide-toggle" type="checkbox" role="switch" name="${key}-enabled" ${row.enabled?'checked':''}> <strong>${esc(data.labels[key])}</strong></label><label>Channel ID <input name="${key}-channel" inputmode="numeric" maxlength="20" value="${esc(row.channel)}" placeholder="Discord channel ID"></label>${data.errors[key]?`<small role="status">${esc(data.errors[key])}</small>`:''}</div>`;
+  };
+  const destinations=keys.map(destination).join('');
+  const groups=[
+   ['Dens',['denReinforced','denAttacked','structureDestroyed']],
+   ['Structures',['structureAttacked','structureReinforced','structureAnchoring']],
+   ['Moons',['moonReady','moonFractured']],
+   ['Pilots',['corpDeparture','corpJoin']],
+   ['Groups',['groupJoin','groupLeave','groupRequest']],
+   ['Fuel',['lowFuel','dailyFuel']]
+  ];
+  const known=new Set(groups.flatMap(([,items])=>items));
+  const other=keys.filter(key=>!known.has(key));
+  if(other.length)groups.push(['Other notifications',other]);
+  const grouped=groups.map(([title,items])=>{
+   const available=items.filter(key=>keys.includes(key));
+   return available.length?`<section class="discord-notification-group" aria-label="${esc(title)} notifications"><h3>${esc(title)}</h3><div class="discord-notification-grid">${available.map(destination).join('')}</div></section>`:'';
   }).join('');
   const fields=board?`<label class="setting-row"><span><strong>Include Den timers</strong><small>Add active reinforcements from pilots covered by Discord Den alerts.</small></span><input class="slide-toggle" type="checkbox" role="switch" name="includeDens" ${data.includeDens?'checked':''}></label>`:`<div class="ops-form-grid"><label>Low fuel or gas threshold (hours)<input name="threshold" type="number" min="1" max="168" required value="${Number(data.threshold)}"></label><label>Daily report time (UTC)<input name="dailyTime" type="time" required value="${esc(data.dailyTime)}"></label></div>`;
-  return `<section class="panel compact"><form class="management-form discord-publishing-form" id="discord-publishing" data-tab="${active}">
+  return `<section class="panel compact"><form class="management-form discord-publishing-form${board?'':' discord-notifications-form'}" id="discord-publishing" data-tab="${active}">
    <p>${board?'Keep one message updated with upcoming corporation and manual Timerboard timers. Enable the Timerboard plugin to publish.':'Choose which events to publish and where. Den alerts cover verified Discord-linked accounts and the admin who saves this tab. A verified account is tagged for its main and alts.'}</p>
    <small>Everyone with access to the channel can read these posts. Give the bot View Channel, Send Messages, and Embed Links.</small>
    ${!data.connected?'<p class="notice">Complete the Discord connection test in Setup before publishing.</p>':''}
-   ${destinations}${fields}
+   ${board?destinations:`<div class="discord-notification-groups">${grouped}</div>`}${fields}
    <div class="actions"><button class="primary">Save ${tabs[active]}</button></div>
   </form></section>`;
  }

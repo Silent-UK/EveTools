@@ -1,3 +1,14 @@
+# EveTools v1.0.1
+
+- Share reinforced Mercenary Den timers for verified corporation members on the site and, when enabled, the Discord Timerboard. Owners do not need a Discord link for shared timer visibility; existing alert mention and access rules are preserved.
+- Add independent Discord alerts and channels for Structure Anchoring, Moon Ready to Fracture and Moon Fractured. Distinguish manual and automatic fractures, retain retries and avoid duplicate or obsolete alerts.
+- Add Structure Destroyed alerts for confirmed corporation structure and Mercenary Den losses, including structures removed from the current inventory. Ordinary disappearance, transfer and ship losses do not count as destruction.
+- Add Pilot joined corporation alongside Pilot left corporation, with independent settings, safe initial baselines and shared roster reads.
+- Arrange Discord Notifications into six compact rows: Dens, Structures, Moons, Pilots, Groups and Fuel, with up to three columns and responsive layouts.
+- Preserve generic installation defaults, existing saved settings, private data boundaries and the empty bundled moon survey catalogue.
+
+Back up your database and existing encryption key before updating. New notification types are off until configured. No additional EVE scopes are introduced; alerts use existing saved notification syncs. This release does not include the separate public demo or bypass normal SSO.
+
 # EveTools v1.0.0 - Logistics location finder
 
 - Search synced corporation structures, known courier locations, configured locations and public NPC stations from Logistics Admin.

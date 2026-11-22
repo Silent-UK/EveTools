@@ -1,4 +1,6 @@
 import {runtimeConfig} from './lib/runtime-config.mjs';
+import {corporationDestructions} from './lib/structure-destruction.mjs';
+import {corporationDenTimers} from './lib/corporation-den-timers.mjs';
 import {installationStore} from './lib/installation.mjs';
 import {communityWorkspace,auditMiddleware} from './lib/community-workspace.mjs';
 import {dashboardAttacks} from './lib/dashboard-attacks.mjs';
@@ -187,7 +189,7 @@ export function createApp(config) {
     req.session={...req.session,user_id:target.id,name:target.name,main_id:target.main_id,admin:0};
     next();
   });
-  app.get("/health", (_req, res) => res.json({ ok: true, version: "1.0.0" }));
+  app.get("/health", (_req, res) => res.json({ ok: true, version: "1.0.1" }));
   app.use((req,res,next)=>{if(config.corporationId!==installation.read().corporationId&&(req.path.startsWith('/api/corporation')||req.path==='/auth/login'||req.path==='/auth/callback'))return res.status(503).json({error:'Restart Tools to activate the saved corporation identity before connecting or syncing.'});next();});
   app.get("/auth/login", (req, res) => {
     if (!config.client || !config.secret)
@@ -455,8 +457,9 @@ export function createApp(config) {
    const allowed=organiser?Object.keys(CORPORATE_PAGES):grants(db,user);
    return {user:req.inspect?null:user,organiser,allowed,canEdit:!req.inspect,contributor:!req.inspect&&!req.recruit&&contributor('calendar',user)};
   }
-  const timerboard=timerboardRoutes(app,{member:projectsAccess,canRemoveTimers:req=>isSiteAdmin(req.session,config.owner),canContribute:req=>contributor('timerboard',req.session.user_id),db,services,calendar,calendarAccess,cat,corporationName:config.corporationName,corporationOwner:[config.corporationTicker,config.allianceTicker].filter(Boolean).join('/')});
-  const publishing=discordPublishing(app,{db,discord,config,calendar,corp,timerboard,timerboardEnabled:()=>services.available({},'timerboard')});
+  const sharedDenTimers=corporationDenTimers(db,config.corporationId);
+  const timerboard=timerboardRoutes(app,{sharedDenTimers,member:projectsAccess,canRemoveTimers:req=>isSiteAdmin(req.session,config.owner),canContribute:req=>contributor('timerboard',req.session.user_id),db,services,calendar,calendarAccess,cat,corporationName:config.corporationName,corporationOwner:[config.corporationTicker,config.allianceTicker].filter(Boolean).join('/')});
+  const publishing=discordPublishing(app,{destructionNotices:()=>corporationDestructions(db,config.corporationId),sharedDenTimers,db,discord,config,calendar,corp,timerboard,timerboardEnabled:()=>services.available({},'timerboard')});
   function homeCalendar(access,prefs,now,showTimers){
    const allowed=access.allowed.filter(page=>prefs[page]!==false);
    const data=calendar.list(allowed,access.canEdit,now,{...access,mto:prefs.dens!==false});

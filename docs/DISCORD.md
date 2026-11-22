@@ -27,3 +27,84 @@ Admin > Links accepts either an HTTP(S) destination or a bare domain (defaults t
 Admin > Users can search mains, linked pilots, IDs, corporations and Group names. Role filters cover Owner/Admin/Member/Recruit and approved site Groups. Sort by name, last online (unknown dates last), or linked-character count in either direction. Discord Connected/Not Connected appears beneath corporation only when integration is enabled; it means a Discord identity is linked.
 
 Check Whitelist queues a review of account login mains, four at a time. Refresh Status shows results. Individual alts are never cleanup candidates. Only confirmed denied accounts receive the whole-account cleanup action; Unknown is shown when ESI cannot verify membership. Only the site owner can execute deletion, with an explicit confirmation. The login main is rechecked immediately before wiping the account, and admins, the acting account and active recruitment applications are protected. Linked pilots, saved data, credentials and sessions are wiped together using the existing account-deletion routine; Discord role cleanup follows the existing deletion ledger. Nothing is deleted automatically.
+
+## Corporation Den timers
+
+With **Include Den timers** enabled, the Discord Timerboard includes reinforced
+Dens belonging to accounts whose login main is verified in the site's corporation,
+including those accounts' linked alts. A linked Discord account is not required to
+show these shared timers. The site Timerboard uses the same corporation source
+alongside the viewer's own Dens and keeps its existing structure visibility checks.
+Existing personal Discord alert and owner-mention eligibility is unchanged.
+Saved timers remain eligible until their normal end time/grace period even if the
+pilot's latest snapshot is older than two hours. A newer Den snapshot replaces the
+old data; a confirmed departure removes the account from corporation sharing.
+
+## Structure Anchoring notifications
+
+In **Admin > Discord > Notifications**, enable **Structure Anchoring** and set its
+Channel ID. This is independent of Structure Attacked, Structure Reinforced and
+the Discord Timerboard. It is off by default. Alerts use saved corporation
+anchoring timers (moon drill notifications/calendar data and structure snapshots
+for citadels) and show the structure, location, icon and expected completion time
+with a Discord countdown. Notification-derived estimates are labelled Estimated.
+Only future, non-manual timers are sent; destroyed structures are excluded. Each
+structure/completion pair is sent once per destination channel, with failed sends
+retried by the normal publisher. No new ESI scopes or Discord role management are
+required.
+
+## Moon readiness and fracture
+
+**Admin > Discord > Notifications** has two independent options, off by default:
+**Moon Ready to Fracture** and **Moon Fractured**. Each accepts its own Channel ID.
+The former uses `MoonminingExtractionFinished`; the latter uses
+`MoonminingLaserFired` and `MoonminingAutomaticFracture` and labels the cause.
+These are observed in-game notifications, not predictions from extraction dates.
+They reuse the verified corporation director notification sync and require its
+existing notification access. No new polling schedule or scope is added.
+
+Events are retained for six hours across director polls. Only structures present
+in the corporation snapshot are published, excluding destroyed structures. Later
+fracture evidence suppresses obsolete readiness notices. Delivery is deduplicated
+per structure, event phase, event time and destination, and failures are retried.
+The settings use three desktop columns, two on smaller screens and one on mobile.
+
+CCP/ESI notification identifiers: https://github.com/esi/eve-glue/blob/master/eve_glue/notification_type.py
+
+## Grouped settings and corporation joiners
+
+Notification options are grouped into six rows in this order: Dens, Structures,
+Moons, Pilots, Groups, Fuel. Each row retains the three-column desktop layout
+and adapts to two/one columns at narrower widths. Group actions are ordered
+Join, Leave, Request. Existing toggle values and Channel IDs are preserved.
+
+**Pilot joined corporation** is independent from **Pilot left corporation**, with
+its own toggle and channel. Both compare the corporation member roster, covering
+in-game membership changes even for pilots without a Tools account. A first check
+after enabling/changing channel quietly records the current roster. Newer observed
+rosters then identify joins/departures; failed or older responses never invent a
+change. Each option checks at most every five minutes, shares a roster read with
+the other when due together, and follows ESI caching. Successful sends are
+remembered, while failed sends remain queued for retry. No new scopes are added.
+
+## Structure Destroyed
+
+The first notification row is Den reinforced, Den under attack, Structure Destroyed.
+The new option is off by default and has its own Channel ID. It covers confirmed
+corporation structures and Mercenary Dens belonging to corporation members,
+without requiring a linked Discord account. Existing scope and settings remain.
+
+The existing corporation/pilot notification sync captures structure destruction,
+skyhook and matching sovereignty destruction notices. Structure-class victim loss
+reports cover additional losses, including POS and customs offices; ordinary ship
+reports are excluded. Public killmail details supply location and corporation
+verification when available. Personal Den reports are owner checked, and stale,
+future and unrelated-corporation evidence is rejected.
+
+Confirmed losses are retained for twelve hours independently of the current
+structure/Den inventory. Delivery retries use stable event keys to avoid duplicate
+posts. Den location history also keeps a two-hour notification watch after the
+last Den disappears; the watch does not renew indefinitely for an empty list.
+No destruction is inferred merely because a structure/Den is missing or moved.
+This uses the existing notifications scope and polling cache; no new SSO scope is
+required. In-game notification availability and ESI sync/cache timing still apply.

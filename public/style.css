@@ -2034,3 +2034,14 @@ tbody>tr:nth-child(even):not(:hover):not(.contract-outstanding):not(.recruit-dan
 .logistics-table table{min-width:1200px}.logistics-table td:first-child{min-width:150px}.logistics-table td:nth-child(2){min-width:210px}.logistics-table td:last-child{white-space:normal;min-width:160px}.logistics-table td:nth-child(5) small{white-space:normal}
 
 .logistics-finder{display:flex;gap:7px;align-items:end;margin:7px 0}.logistics-finder label{flex:1;display:grid;gap:4px}.logistics-found{display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid var(--line);border-radius:6px;padding:6px 8px;margin:4px 0;background:var(--theme-panel)}.logistics-found small{display:block;margin-top:3px}.logistics-found button{white-space:nowrap}[data-location-results]{max-height:280px;overflow:auto;margin-bottom:8px}@media(max-width:550px){.logistics-found{align-items:start}.logistics-found span{min-width:0;overflow-wrap:anywhere}}
+
+.discord-notifications-form{max-width:none}
+.discord-notification-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.discord-notification-grid .discord-destination{min-width:0;grid-template-columns:minmax(0,1fr);align-content:start;padding:8px;border:1px solid var(--line);border-radius:8px}
+.discord-notification-grid .discord-destination label{min-width:0;overflow-wrap:anywhere}
+@media(max-width:1100px){.discord-notification-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:700px){.discord-notification-grid{grid-template-columns:minmax(0,1fr)}}
+
+.discord-notification-groups{display:grid;gap:10px}
+.discord-notification-group{min-width:0}
+.discord-notification-group>h3{margin:0 0 4px;font-size:11px;color:var(--muted)}
