@@ -1,7 +1,7 @@
 import {moonGooView} from './moon-goo-view.mjs';
 import {corpPages,csv,DAY,matches,inDates,validateDates,expiry,marketOrders,filterMembers,memberBand,stockAt,runway,structureReasons,fuelPlan,transferRow} from './corp-workspace-model.mjs';
 import {walletRows,walletBreakdown} from './wallet-view.mjs';
-import {contractPreferences} from './contracts-model.mjs';
+import {filterContracts,contractPreferences} from './contracts-model.mjs';
 import {contractsView,contractRows} from './contracts-view.mjs';
 import {contractsCSV} from './contracts-model.mjs';
 import {stackAssetRows} from './asset-tree.mjs';
@@ -33,7 +33,7 @@ const defaults={
  'corp-search-pilots':{q:'',type:'',name:'',location:'',category:'',exact:false,group:'account'},
  'corp-wallet':{q:'',division:'',mode:'journal',days:'30',type:'',direction:'',from:'',to:'',flows:'all'},
  'corp-market':{q:'',side:'',state:'',expiry:'',sort:'expiry',from:'',to:'',history:false},
- 'corp-contracts':contractPreferences(),
+ 'corp-contracts':contractPreferences({status:'active'}),
  'corp-standings':{q:'',kind:'',sign:'',sort:'low'},
  'corp-industry':{q:'',status:'',activity:'',installer:'',location:'',group:'facility'},
  'corp-structures':{q:'',region:'',kind:'',attention:false,sort:'runway',days:'7'},
@@ -45,9 +45,9 @@ export function corporationWorkspace({api,intro,context,refresh,toast}){
   const {me}=context(),key='tools-corporation:'+me.main_id+':'+(me.inspect?.main_id||'self')+':'+next;
   if(scope===key)return;contractView='corporation';page=next;scope=key;offset=0;exportData=[];remoteExport=null;contractExport=null;copyText='';
   f={...(defaults[page]||{})};
-  try{const saved=JSON.parse(localStorage.getItem(scope)||'{}');for(const key of Object.keys(f))if(typeof saved[key]===typeof f[key])f[key]=typeof saved[key]==='string'?saved[key].slice(0,200):saved[key];validateDates(f);}catch{f={...(defaults[page]||{})};}
+  try{const saved=JSON.parse(localStorage.getItem(scope)||'{}');for(const key of Object.keys(f))if(typeof saved[key]===typeof f[key])f[key]=typeof saved[key]==='string'?saved[key].slice(0,200):saved[key];if(page==='corp-contracts'&&!saved._contractStatusDefault&&!saved.status)f.status='active';validateDates(f);}catch{f={...(defaults[page]||{})};}
  }
- function save(){try{localStorage.setItem(scope,JSON.stringify(f));}catch{}}
+ function save(){try{localStorage.setItem(scope,JSON.stringify(page==='corp-contracts'?{...f,_contractStatusDefault:1}:f));}catch{}}
  const button=(action,label)=>`<button type="button" data-cw-action="${action}">${label}</button>`;
  const input=(name,label,type='search')=>`<label>${esc(label)}<input name="${name}" type="${type}" value="${esc(f[name]||'')}" ${type==='number'?'min="1"':''}></label>`;
  const pick=(name,label,options)=>`<label>${esc(label)}<select name="${name}">${options.map(([v,l])=>`<option value="${esc(v)}" ${String(f[name]??'')===String(v)?'selected':''}>${esc(l)}</option>`).join('')}</select></label>`;
@@ -133,9 +133,9 @@ export function corporationWorkspace({api,intro,context,refresh,toast}){
  async function contracts(){
   const d=await api('/corporation/contracts?view='+contractView),pilots=[{name:'Corporation',data:d,updated:d.updated,error:d.error}],filters={...contractPreferences(f),direction:'',availability:''};
   if(d.refreshing){const currentScope=scope;refreshTimer=setTimeout(()=>{if(page==='corp-contracts'&&(!context().page||context().page==='corp-contracts')&&scope===currentScope&&!document.hidden)refresh();},10000);refreshTimer.unref?.();}
-  const rows=contractRows(pilots,filters);contractExport=()=>contractsCSV(rows);
+  const all=contractRows(pilots),rows=filterContracts(all,filters);contractExport=()=>contractsCSV(rows);
   return pageStart('Corporation Contracts','Review deadlines, courier deliveries and retained contract history.',d)+`<div class="workspace-tabs" role="tablist" aria-label="Contract scope">${[['corporation','Corporation'],['alliance','Alliance']].map(([view,label])=>`<button type="button" role="tab" aria-selected="${contractView===view}" class="${contractView===view?'active':''}" data-cw-contract-view="${view}">${label}</button>`).join('')}</div>`+
-   contractsView(pilots,filters,offset,true).replace('id="contracts-filter"','id="cw-filter"').replaceAll('data-contract-action','data-cw-action').replaceAll('data-contract-offset','data-cw-offset').replaceAll('data-contracts-offset','data-cw-offset').replace('Unique contracts across selected pilots','Unique corporation contracts').replace('Some pilots have missing, stale or failed snapshots.','Corporation contract data is missing, stale or its last refresh failed.').replace(/<label>Direction[\s\S]*?<\/label>/,'').replace(/<label>Availability[\s\S]*?<\/label>/,'');
+   contractsView(pilots,filters,offset,true,{all,rows}).replace('id="contracts-filter"','id="cw-filter"').replaceAll('data-contract-action','data-cw-action').replaceAll('data-contract-offset','data-cw-offset').replaceAll('data-contracts-offset','data-cw-offset').replace('Unique contracts across selected pilots','Unique corporation contracts').replace('Some pilots have missing, stale or failed snapshots.','Corporation contract data is missing, stale or its last refresh failed.').replace(/<label>Direction[\s\S]*?<\/label>/,'').replace(/<label>Availability[\s\S]*?<\/label>/,'');
  }
  async function market(){
   const d=await api('/corporation/market'),rows=marketOrders(d,f),active=rows.filter(r=>r.status==='active');

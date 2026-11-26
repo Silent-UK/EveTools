@@ -2,9 +2,13 @@ const validDate=v=>typeof v==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(v)&&Number.is
 export function contractPreferences(raw={}){const p=raw&&typeof raw==='object'?raw:{};return {type:['item_exchange','courier','auction'].includes(p.type)?p.type:'',status:typeof p.status==='string'?p.status.slice(0,40):'',direction:['issued','received'].includes(p.direction)?p.direction:'',availability:['public','personal','corporation','alliance'].includes(p.availability)?p.availability:'',attention:['expiring','overdue','failed'].includes(p.attention)?p.attention:'',q:typeof p.q==='string'?p.q.slice(0,200):'',from:validDate(p.from)?p.from:'',to:validDate(p.to)?p.to:'',pilot:typeof p.pilot==='string'&&/^\d*$/.test(p.pilot)?p.pilot:''};}
 export function mergeContracts(pilots){
  const map=new Map(),owned=new Set(pilots.map(p=>Number(p.id)));
+ const dictionaries=new Map(pilots.map(p=>[p,{names:p.data?.names||{},locations:p.data?.locations||{}}]));
+ const mergedDictionaries=new Map();
  for(const p of pilots)for(const r of p.data?.contracts||[]){
   const old=map.get(r.contract_id),newer=!old||Number(r.observed||0)>Number(old.observed||0)||(Number(r.observed||0)===Number(old.observed||0)&&old.retained&&!r.retained);
-  const names={...(old?.names||{}),...(p.data.names||{})},locations={...(old?.locations||{}),...(p.data.locations||{})},seen=[...new Set([...(old?.pilots||[]),p.name])];
+  let dictionariesForRow=dictionaries.get(p);
+  if(old){let byNames=mergedDictionaries.get(old.names);if(!byNames)mergedDictionaries.set(old.names,byNames=new Map());if(!byNames.has(p))byNames.set(p,{names:{...old.names,...dictionariesForRow.names},locations:{...old.locations,...dictionariesForRow.locations}});dictionariesForRow=byNames.get(p);}
+  const {names,locations}=dictionariesForRow,seen=[...new Set([...(old?.pilots||[]),p.name])];
   const chosen=newer?{...r,snapshot_updated:p.updated,snapshot_error:p.error}:old;
   const accepted=Date.parse(chosen.date_accepted),days=Number(chosen.days_to_complete),delivery=Number.isFinite(accepted)&&Number.isFinite(days)&&days>0?new Date(accepted+days*86400000).toISOString():null;
   map.set(r.contract_id,{...chosen,pilots:seen,names,locations,delivery_due:delivery,issued:!chosen.for_corporation&&owned.has(Number(chosen.issuer_id)),received:chosen.availability==='personal'&&owned.has(Number(chosen.assignee_id))||owned.has(Number(chosen.acceptor_id))});
@@ -22,10 +26,10 @@ export function contractWarning(r,now=Date.now()){
 export function filterContracts(rows,filters={},now=Date.now()){
  const q=String(filters.q||'').trim().toLocaleLowerCase();
  return rows.filter(r=>{
- if(filters.type&&r.type!==filters.type||filters.status&&r.status!==filters.status||filters.availability&&r.availability!==filters.availability||filters.direction&&!r[filters.direction])return false;
+ if(filters.type&&r.type!==filters.type||filters.status&&(filters.status==='active'?!['outstanding','in_progress'].includes(r.status):r.status!==filters.status)||filters.availability&&r.availability!==filters.availability||filters.direction&&!r[filters.direction])return false;
  const issued=Date.parse(r.date_issued);if(filters.from&&(!Number.isFinite(issued)||issued<Date.parse(filters.from))||filters.to&&(!Number.isFinite(issued)||issued>=Date.parse(filters.to)+86400000))return false;
  if(filters.attention){const warning=contractWarning(r,now).toLowerCase();if(filters.attention==='expiring'&&!warning.includes('within 24')||filters.attention==='overdue'&&!warning.includes('overdue')||filters.attention==='failed'&&!['failed','rejected','reversed','deleted'].includes(r.status))return false;}
- return !q||[r.title,r.contract_id,...r.pilots,...Object.values(r.names),r.issuer_id,r.assignee_id,r.acceptor_id,...Object.values(r.locations),...(r.items||[]).map(i=>i.name)].join(' ').toLocaleLowerCase().includes(q);
+ return !q||[r.title,r.contract_id,...r.pilots,...[r.issuer_id,r.issuer_corporation_id,r.assignee_id,r.acceptor_id].map(id=>r.names[id]),r.issuer_id,r.assignee_id,r.acceptor_id,...[r.start_location_id,r.end_location_id].map(id=>r.locations[id]),...(r.items||[]).map(i=>i.name)].join(' ').toLocaleLowerCase().includes(q);
  });
 }
 export function contractsCSV(rows){

@@ -58,10 +58,10 @@ import {personalWalletView} from '../public/personal-wallet-view.mjs';
 import {walletPreferences} from '../public/personal-wallet-model.mjs';
 import {collectWalletHistory} from '../lib/wallet-history.mjs';
 test('Corporation view never enriches alliance contract items; alliance details load only on request',async()=>{
- const list=[{contract_id:1,availability:'corporation',status:'outstanding',type:'item_exchange'},{contract_id:2,availability:'alliance',status:'outstanding',type:'item_exchange'}],calls=[];
+ const list=[{contract_id:1,assignee_id:99000001,availability:'personal',status:'outstanding',type:'item_exchange'},{contract_id:2,assignee_id:99009999,availability:'personal',status:'outstanding',type:'item_exchange'}],calls=[];
  const eve={request:async(path)=>{calls.push(path);if(path.includes('/items'))return {data:[]};return {pages:1,data:list};}},pilot={id:99000001,scopes:JSON.stringify(['esi-contracts.read_corporation_contracts.v1'])};
  const corp=await collectContracts(pilot,eve,{},null,{corporation:true,view:'corporation'});assert.deepEqual(corp.contracts.map(r=>r.contract_id),[1]);assert.ok(!calls.some(p=>p.endsWith('/2/items')));
- const alliance=await collectContracts(pilot,eve,{},null,{corporation:true,view:'alliance'});assert.deepEqual(alliance.contracts.map(r=>r.contract_id),[2]);assert.ok(calls.some(p=>p.endsWith('/2/items')));
+ const alliance=await collectContracts(pilot,eve,{},null,{corporation:true,view:'alliance',allianceId:99009999});assert.deepEqual(alliance.contracts.map(r=>r.contract_id),[2]);assert.ok(calls.some(p=>p.endsWith('/2/items')));
 });
 test('Market journal details show resolved pilot/from/to names with safe ID fallback and escaped names',()=>{
  const now=Date.now(),pilot={id:200,name:'Example Pilot',updated:now,data:{journal:[{id:1,date:new Date(now).toISOString(),ref_type:'market_escrow',amount:123,first_party_id:200,second_party_id:300,description:'Market escrow release'}],transactions:[],names:{300:'Other <Pilot>'}}};
@@ -101,8 +101,22 @@ test('Contracts open on Corporation, load Alliance only on click and reset on th
  const previous=globalThis.document,clicks=[],calls=[];globalThis.document={addEventListener:(type,handler)=>{if(type==='click')clicks.push(handler);},hidden:false};
  try{
   let workspace;workspace=corporationWorkspace({api:async path=>{calls.push(path);return {contracts:[],updated:Date.now(),names:{},locations:{}};},intro:()=>'',context:()=>({me:{main_id:100,admin:true},chars:[],page:'corp-contracts'}),refresh:async()=>{await workspace.render('corp-contracts');},toast(){}});
-  await workspace.render('corp-contracts');assert.deepEqual(calls,['/corporation/contracts?view=corporation']);
+  assert.match(await workspace.render('corp-contracts'),/<option value="active" selected>Outstanding &amp; In Progress<\/option>/);assert.deepEqual(calls,['/corporation/contracts?view=corporation']);
   const button={dataset:{cwContractView:'alliance'},closest:()=>({})};await clicks[0]({target:{closest:()=>button}});assert.equal(calls.at(-1),'/corporation/contracts?view=alliance');
   workspace.navigated('home');await workspace.render('corp-contracts');assert.equal(calls.at(-1),'/corporation/contracts?view=corporation');
  }finally{if(previous===undefined)delete globalThis.document;else globalThis.document=previous;}
 });
+
+test('contract tabs reclassify personal availability by party IDs and retain legacy alliance history',()=>fixture(async({db})=>{
+ const id=99000001,alliance=99009999,rows=[
+ {contract_id:1,assignee_id:id,availability:'personal'},
+ {contract_id:2,assignee_id:alliance,availability:'personal'},
+ {contract_id:3,issuer_corporation_id:id,for_corporation:true,assignee_id:123},
+ {contract_id:4,issuer_corporation_id:id,for_corporation:false,assignee_id:alliance},
+ {contract_id:5,issuer_corporation_id:123,assignee_id:456}];
+ db.prepare('INSERT INTO public_cache VALUES(?,?,?)').run('/tools/corp-data/contracts',JSON.stringify({contracts:rows,updated:123,names:{}}),Date.now()+3600000);
+ let lookups=0;const service=corpDataService({db,id,cat:{},access:async()=>false,eve:{publicGet:async()=>{lookups++;return {alliance_id:alliance};}}});
+ const corp=await service.contracts();assert.equal(lookups,0);assert.deepEqual(corp.contracts.map(r=>r.contract_id),[1,3]);
+ const ally=await service.contracts({view:'alliance'});assert.equal(lookups,1);assert.deepEqual(ally.contracts.map(r=>r.contract_id),[2,4]);
+ await new Promise(resolve=>setImmediate(resolve));
+}));

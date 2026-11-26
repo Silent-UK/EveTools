@@ -38,7 +38,7 @@ async function corpFixture(fn){
 
 test('corporation contracts serve saved data during one shared slow background refresh',()=>corpFixture(async db=>{
  db.prepare('UPDATE corp_authorizations SET scopes=?').run('["esi-contracts.read_corporation_contracts.v1"]');
- db.prepare('INSERT INTO public_cache VALUES(?,?,?)').run('/tools/corp-data/contracts',JSON.stringify({contracts:[{contract_id:9}],updated:123}),0);
+ db.prepare('INSERT INTO public_cache VALUES(?,?,?)').run('/tools/corp-data/contracts',JSON.stringify({contracts:[{contract_id:9,assignee_id:668298004}],updated:123}),0);
  let finish,calls=0;const slow=new Promise(resolve=>finish=resolve);
  const service=corpDataService({db,id:668298004,cat:{},eve:{},access:async()=>true,request:async()=>{calls++;return slow;}});
  const a=await service.contracts(),b=await service.contracts();assert.equal(a.contracts[0].contract_id,9);assert.equal(a.refreshing,true);assert.equal(b.updated,123);assert.equal(calls,1);

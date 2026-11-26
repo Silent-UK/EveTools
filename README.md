@@ -4,7 +4,7 @@
 
 EveTools is a self-hosted EVE Online management platform for pilots and corporations. Connect characters through EVE SSO, bring your corporation's ESI data together, and manage everyday activity, access, logistics and alerts in a compact, theme-aware workspace.
 
-**Version 1.0.2 · Node.js 24+ · SQLite · AGPL-3.0-only**
+**Version 1.0.3 · Node.js 24+ · SQLite · AGPL-3.0-only**
 
 ## What can it do?
 
@@ -57,7 +57,7 @@ After importing a catalogue into `data/`, run `node scripts/preview.mjs` and ope
 - [Recruitment](docs/RECRUITMENT.md) · [custom pages](docs/PAGES.md)
 - [Fitting engine and corresponding source](docs/FITTING_WORKSPACE_REVIEW.md)
 - [Asset safety](docs/ASSET_SAFETY.md) · [ESI diagnostics](docs/ESI_DIAGNOSTICS.md)
-- [Maintenance and contributing](docs/MAINTENANCE.md) · [v1.0.2 release notes](docs/PATCH_NOTES.md)
+- [Maintenance and contributing](docs/MAINTENANCE.md) · [v1.0.3 release notes](docs/PATCH_NOTES.md)
 
 ## Data and API expectations
 

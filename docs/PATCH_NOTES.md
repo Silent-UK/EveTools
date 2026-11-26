@@ -1,3 +1,13 @@
+# EveTools v1.0.3 - Corporation Contracts fixes
+
+- Fix browser memory exhaustion on large contract histories by sharing party/location lookup dictionaries and processing the history once per render. Keep full saved history, 50-row pagination, filters and CSV export.
+- Correct the Corporation and Alliance tabs to use actual party IDs instead of ESI availability labels. Corporation includes contracts addressed to or accepted by the corporation and contracts issued on its behalf. Alliance includes contracts addressed to/from the alliance, including those ESI labels personal.
+- Reclassify saved history into the corrected tab caches without waiting for a complete ESI sync. Keep Alliance lazy loaded and preserve saved data when alliance identity cannot be checked.
+- Default both tabs to Outstanding & In Progress. Completed and other saved statuses remain available through Status > All or individual statuses. Clear returns to the active default; explicit saved choices are preserved.
+- Search only parties and locations belonging to each contract, rather than unrelated names in the shared lookup history.
+
+Back up your database and existing encryption key before updating. No new EVE scopes are required. Saved contract history is retained.
+
 # EveTools v1.0.2 - Character removals, audit history and corporation views
 
 - Unlinking a character stops tracking, removes credentials, sync jobs and sharing, and retains a snapshot archive in Admin > Users > Removals. Admins can search removals and permanently delete retained data with confirmation; removing an old archive cannot delete a newly relinked character.
