@@ -148,3 +148,7 @@ sudo chmod 600 /var/backups/evetools/tools.sqlite
 Also back up `/etc/evetools/evetools.env` securely and separately: losing the encryption key makes stored EVE/Discord tokens unreadable. Do not print or upload it. Retain timestamped backups according to your policy. Uploaded group images and member records are in the database; the catalogue can be reproduced from CCP SDE.
 
 Application rollback is not database rollback. Review schema compatibility before pointing `current` at an old release. Restore a database only from a deliberate verified backup, with the service stopped and its original encryption key available. To update SDE, import into a staging data directory, validate it, stop the service and replace the catalogue while retaining the old copy, then restart. Never run the fictional preview process on the VPS.
+
+## Optional corporation contact standings (1.0.2)
+
+To populate corporation/alliance contact standings, enable `esi-corporations.read_contacts.v1` on your EVE developer application, then use Reconnect Corporation ESI on Corporation Standings. This is an explicit optional corporation reconnect; normal sign-ins keep the existing scope set. Existing contacts grants are preserved on later corporation reconnects. NPC standings stay available without the new scope. Back up the database and original encryption key before applying an update; removal archives and typed audit tables migrate automatically.

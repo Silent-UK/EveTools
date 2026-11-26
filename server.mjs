@@ -1,4 +1,6 @@
 import {runtimeConfig} from './lib/runtime-config.mjs';
+import {CONTACT_SCOPE} from './lib/corp.mjs';
+import {characterRemovals,removalRoutes} from './lib/character-removals.mjs';
 import {corporationDestructions} from './lib/structure-destruction.mjs';
 import {corporationDenTimers} from './lib/corporation-den-timers.mjs';
 import {installationStore} from './lib/installation.mjs';
@@ -189,12 +191,13 @@ export function createApp(config) {
     req.session={...req.session,user_id:target.id,name:target.name,main_id:target.main_id,admin:0};
     next();
   });
-  app.get("/health", (_req, res) => res.json({ ok: true, version: "1.0.1" }));
+  app.get("/health", (_req, res) => res.json({ ok: true, version: "1.0.2" }));
   app.use((req,res,next)=>{if(config.corporationId!==installation.read().corporationId&&(req.path.startsWith('/api/corporation')||req.path==='/auth/login'||req.path==='/auth/callback'))return res.status(503).json({error:'Restart Tools to activate the saved corporation identity before connecting or syncing.'});next();});
   app.get("/auth/login", (req, res) => {
     if (!config.client || !config.secret)
       return res.status(503).send("EVE login is not configured yet.");
     const corporation=req.query.corporation === "1",mining=req.query.mining === "1",projects=corporation&&(req.query.projects==='1'||JSON.parse(db.prepare("SELECT scopes FROM corp_authorizations WHERE user_id=?").get(req.session?.user_id??null)?.scopes||"[]").includes(PROJECT_SCOPE));
+    const contacts=corporation&&(req.query.contacts==='1'||JSON.parse(db.prepare('SELECT scopes FROM corp_authorizations WHERE user_id=?').get(req.session?.user_id??null)?.scopes||'[]').includes(CONTACT_SCOPE));
     if(mining && (!req.session||corporation))return res.sendStatus(400);
     const miningCharacter=mining?ownedCharacter(db,req.session.user_id,req.query.character):null;
     if(corporation && !req.session)return res.sendStatus(401);
@@ -230,6 +233,7 @@ export function createApp(config) {
     );
     if(mining)db.prepare("INSERT INTO oauth_mining VALUES(?,?)").run(hash(state),miningCharacter.id);
     if(corporation)db.prepare("INSERT INTO oauth_corporations VALUES(?)").run(hash(state));
+    if(contacts)db.prepare("INSERT INTO oauth_corporation_contacts VALUES(?)").run(hash(state));
     if(groupMode)db.prepare("INSERT INTO oauth_character_groups VALUES(?,?,?)").run(hash(state),groupMode,groupParent);
     res.cookie("tools_oauth", browser, { ...cookieOptions, maxAge: 600000 });
     const url = new URL("https://login.eveonline.com/v2/oauth/authorize");
@@ -237,7 +241,7 @@ export function createApp(config) {
       response_type: "code",
       client_id: config.client,
       redirect_uri: config.base + "/auth/callback",
-      scope: (projects?[...CORP_SCOPES,PROJECT_SCOPE,'esi-universe.read_structures.v1']:corporation?CORP_SCOPES:SCOPES).join(" "),
+      scope: [...(projects?[...CORP_SCOPES,PROJECT_SCOPE,'esi-universe.read_structures.v1']:corporation?CORP_SCOPES:SCOPES),...(contacts?[CONTACT_SCOPE]:[])].join(" "),
       state,
       code_challenge: Buffer.from(hash(verifier), "hex").toString("base64url"),
       code_challenge_method: "S256",
@@ -254,6 +258,7 @@ export function createApp(config) {
     if (!flow)
       return res.status(400).send("Login expired or invalid. Start again.");
     const corporation=!!db.prepare("SELECT 1 FROM oauth_corporations WHERE state=?").get(hash(state));
+    const contacts=!!db.prepare("SELECT 1 FROM oauth_corporation_contacts WHERE state=?").get(hash(state));
     if(corporation && !req.session)return res.sendStatus(401);
     const miningFlow=db.prepare("SELECT character_id FROM oauth_mining WHERE state=?").get(hash(state));
     const grouping=db.prepare("SELECT mode,parent_id FROM oauth_character_groups WHERE state=?").get(hash(state));
@@ -274,7 +279,7 @@ export function createApp(config) {
       id = await (config.verifyToken || verifyToken)(
         token.access_token,
         config.client,
-        corporation&&flow.invite==='corp-projects'?[...CORP_SCOPES,PROJECT_SCOPE,'esi-universe.read_structures.v1']:corporation?CORP_SCOPES:SCOPES,
+        [...(corporation&&flow.invite==='corp-projects'?[...CORP_SCOPES,PROJECT_SCOPE,'esi-universe.read_structures.v1']:corporation?CORP_SCOPES:SCOPES),...(contacts?[CONTACT_SCOPE]:[])],
       );
     if(miningFlow && id.id!==miningFlow.character_id)throw Object.assign(Error('Choose the pilot whose mining access you are connecting.'),{status:403});
     if(corporation) {
@@ -285,7 +290,8 @@ export function createApp(config) {
       const corpInfo=verifiedCorp;
       if(req.session.main_id===config.owner)db.prepare("INSERT INTO corporation_connections VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(corporation_id) DO UPDATE SET name=excluded.name,character_id=excluded.character_id,character_name=excluded.character_name,owner_hash=excluded.owner_hash,tokens=excluded.tokens,verified=excluded.verified,role=excluded.role").run(corpInfo.id,corpInfo.name,id.id,id.name,id.owner,box.seal(token),Date.now(),corpInfo.role);
       if(flow.invite==='corp-projects')db.prepare("UPDATE public_cache SET expires=0 WHERE path='/tools/corp-data/projects'").run();
-      return res.redirect(flow.invite==='corp-projects'?'/#corp-projects':"/#corp-structures");
+      if(contacts)db.prepare("UPDATE public_cache SET expires=0 WHERE path='/tools/corp-data/contact-standings'").run();
+      return res.redirect(flow.invite==='corp-projects'?'/#corp-projects':contacts?'/#corp-standings':"/#corp-structures");
     }
     let memberLogin=false,corporateLogin=false;
     if(!flow.user_id){try{const membership=await whitelist.check(id.id,true);memberLogin=true;corporateLogin=membership!==null;}catch(e){const applicant=db.prepare("SELECT a.status FROM recruitment_applications a JOIN users u ON u.id=a.user_id WHERE u.main_id=? AND a.status NOT IN ('rejected','withdrawn','joined')").get(id.id);if(e.status!==403||!(flow.invite==='recruit'||applicant))throw e;}}
@@ -297,6 +303,7 @@ export function createApp(config) {
         else automaticDenied=true;
       }catch(e){if(e.status===403)automaticDenied=true;}
     }
+    let characterAdded=false;
     const user = transaction(db, () => {
       const existing = db
         .prepare("SELECT * FROM characters WHERE id=?")
@@ -313,6 +320,7 @@ export function createApp(config) {
           Error("Character is already linked to another Tools account."),
           { status: 409 },
         );
+      characterAdded=!existing;
       let uid = flow.user_id;
       if (!uid && existing) {
         const u = db
@@ -357,9 +365,12 @@ export function createApp(config) {
       if(flow.invite==='recruit'&&!memberLogin)db.prepare("INSERT OR IGNORE INTO recruitment_applications(user_id,created,consented) VALUES(?,?,?)").run(uid,Date.now(),Date.now());
       return uid;
     });
+    const auditUser=db.prepare('SELECT main_id,name FROM users WHERE id=?').get(user),auditReq={session:auditUser};
+    if(characterAdded)installation.audit(auditReq,'Character added',id.name+' · '+id.id,'characters');
+    if(!flow.user_id)installation.audit(auditReq,'User signed in',id.name,'activity');
     if(corporateLogin)recruitMembership.verified(user,id.id);
     const existingProjectGrant=db.prepare('SELECT scopes FROM corp_authorizations WHERE user_id=?').get(user);
-    if(automaticCorp && !JSON.parse(existingProjectGrant?.scopes || '[]').includes(PROJECT_SCOPE)){
+    if(automaticCorp && ![PROJECT_SCOPE,CONTACT_SCOPE].some(scope=>JSON.parse(existingProjectGrant?.scopes || '[]').includes(scope))){
       const reference=box.seal({linked_character_id:id.id});
       transaction(db,()=>{
         db.prepare("INSERT INTO corp_authorizations VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET character_id=excluded.character_id,character_name=excluded.character_name,owner_hash=excluded.owner_hash,corporation_id=excluded.corporation_id,tokens=excluded.tokens,scopes=excluded.scopes,expires=excluded.expires,role=excluded.role,verified=excluded.verified").run(user,id.id,id.name,id.owner,automaticCorp.id,reference,JSON.stringify(id.scopes),id.expires,automaticCorp.role,Date.now());
@@ -412,7 +423,7 @@ export function createApp(config) {
   fittingImportRoutes(app,{db,eve,cat});
   fittingWorkbenchRoutes(app,{db,eve,cat,simulate:config.fittingSimulator});
   sitePageRoutes(app,{db,config});
-  discordRoutes(app,{discord,config});
+  discordRoutes(app,{discord,config,audit:(req,action,target)=>installation.audit(req,action,target,'discord')});
   const marketPI=jitaPricing(db,eve,true);
   const services=servicePluginRoutes(app,{db,config,cat,jitaQuotes:marketPI,contracts:()=>corp.contracts({ttl:300000}),structures:()=>corp.snapshot()});
   const servicePluginStates=async req=>({...services.pluginStates(req),timerboard:await timerboard.visible(req)});
@@ -434,6 +445,7 @@ export function createApp(config) {
   const srp=shipReplacement(app,{db,cat,eve,config,discord,corp});
   recruitmentRoutes(app,{db,recruitment,config});
   managementRoutes(app,{db,eve,corp,cat,config,whitelist,discord,groupEnrolment,projectsAccess,groupAvailable,groupChanged});
+  const removals=characterRemovals(db);removalRoutes(app,{db,config});
   const community=communityWorkspace(app,{db,config,installation,srp,services,recruitment});
   materialRoutes(app,{db,cat,corp,grants,admin:req=>isSiteAdmin(req.session,config.owner)});
   async function projectsAccess(req) {
@@ -581,7 +593,7 @@ export function createApp(config) {
   app.get('/api/corporation/pilots',async(req,res)=>res.json(await corp.pilots()));
   app.get('/api/corporation/pilot-assets',(req,res)=>{if(req.inspect)return res.sendStatus(403);res.json(pilotAssetSearch(db,cat,req.session,config,req.query));});
   app.get('/api/corporation/assets',async(req,res)=>res.json(await corp.assets(req.query)));
-  app.get('/api/corporation/contracts',async(req,res)=>res.json(await corp.contracts()));
+  app.get('/api/corporation/contracts',async(req,res)=>res.json(await corp.contracts({view:String(req.query.view||'corporation')})));
   app.get('/api/corporation/market',async(req,res)=>res.json(await corp.market()));
   app.get('/api/corporation/blueprints',async(req,res)=>res.json(await corp.blueprints()));
   app.get('/api/corporation/standings',async(req,res)=>res.json(await corp.standings()));
@@ -699,6 +711,7 @@ export function createApp(config) {
       db.prepare('DELETE FROM corp_authorizations WHERE user_id=? AND character_id=?').run(req.session.user_id,c.id);
       db.prepare('DELETE FROM corporation_connections WHERE character_id=? AND owner_hash=?').run(c.id,c.owner_hash);
       removePilotWhitelist(db,[c.id]);
+      removals.archive(c);
       db.prepare("DELETE FROM characters WHERE id=?").run(c.id);
     });
     corp.invalidate(req.session.user_id);
@@ -1191,10 +1204,7 @@ export function createApp(config) {
   app.get(['/','/Recruit','/index.html'],(_req,res)=>res.set('Cache-Control','no-cache').type('html').send(appShell));
   app.use(
     express.static(
-      new URL("./public", import.meta.url).pathname.replace(
-        /^\/([A-Za-z]:)/,
-        "$1",
-      ),
+      fileURLToPath(new URL("./public", import.meta.url)),
       { index: "index.html" },
     ),
   );

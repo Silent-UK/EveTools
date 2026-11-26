@@ -108,3 +108,11 @@ last Den disappears; the watch does not renew indefinitely for an empty list.
 No destruction is inferred merely because a structure/Den is missing or moved.
 This uses the existing notifications scope and polling cache; no new SSO scope is
 required. In-game notification availability and ESI sync/cache timing still apply.
+
+## Tower under attack
+
+Enable **Tower under attack** and its Channel ID after **Moon Fractured** in Admin > Discord > Notifications. It is independent of Structure Attacked and off by default. POS attacks use the dedicated destination; existing citadel and other structure attacks retain their existing setting.
+
+The corporation notification sync now accepts native `TowerAlertMsg` data identified by moon, solar system and tower type, without requiring a structure ID that may not be present. Matching POS snapshots and public universe lookups provide names where available. A single compact embed shows the tower icon/type, moon/system, reported time and available shield/armour/hull percentages; missing health values remain unknown.
+
+Saved attacks are retained for twelve hours; only notices from the last hour are eligible for Discord delivery. Duplicate director observations and successful sends are deduplicated, failed sends retry, known destroyed towers and future notices are skipped, and no role or mass mentions are sent. Existing settings and notification scopes are preserved.

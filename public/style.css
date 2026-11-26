@@ -2045,3 +2045,5 @@ tbody>tr:nth-child(even):not(:hover):not(.contract-outstanding):not(.recruit-dan
 .discord-notification-groups{display:grid;gap:10px}
 .discord-notification-group{min-width:0}
 .discord-notification-group>h3{margin:0 0 4px;font-size:11px;color:var(--muted)}
+
+.corp-workspace .workspace-tabs{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0;border-bottom:1px solid var(--line);padding-bottom:6px}.corp-workspace .workspace-tabs button{font-size:12px;min-height:27px;padding:4px 9px}.corp-workspace .workspace-tabs button.active{color:var(--purple);border-color:var(--purple)}.corp-workspace .workspace-tabs small{margin-left:4px}.audit-esi-issue td:nth-child(4){color:var(--red,#ff8c8c)}

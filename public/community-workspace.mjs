@@ -1,11 +1,15 @@
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const date=at=>new Date(at).toISOString().replace('T',' ').slice(0,16)+' UTC';
 export function communityWorkspaceUI({api,intro,refresh,toast,context}){
- let query='',offset=0,editingAnnouncement=null;
+ let query='',auditType='',auditFrom='',auditTo='',offset=0,editingAnnouncement=null,removalQuery='',removalOffset=0;
  const input=(name,label,value,type='text',extra='')=>`<label>${label}<input name="${name}" type="${type}" value="${esc(value)}" ${extra}></label>`;
  async function render(page){
-  if(!['admin-installation','admin-announcements','admin-audit'].includes(page))return null;
+  if(!['admin-installation','admin-announcements','admin-audit','admin-removals'].includes(page))return null;
   if(!context().me.admin||context().me.inspect)return intro('Administration','Administrator access is required.');
+  if(page==='admin-removals'){
+   const d=await api('/admin/removals?q='+encodeURIComponent(removalQuery)+'&offset='+removalOffset);
+   return intro('Character removals','Tracking and access tokens have been removed. Admins can permanently delete retained snapshots here.')+`<div class="actions"><button data-nav="admin-users">Users</button><button aria-current="page">Removals</button></div><section class="panel compact"><form id="removal-search" class="actions">${input('q','Search character or account',removalQuery)}<button type="submit">Search</button></form><div class="table-scroll"><table><thead><tr><th>Character</th><th>Account</th><th>Removed · EVE time</th><th>Retained datasets</th><th>Actions</th></tr></thead><tbody>${d.rows.map(row=>`<tr><td><strong>${esc(row.name)}</strong><small>${row.character_id}</small></td><td>${esc(row.account)}</td><td>${date(row.removed)}</td><td>${row.datasets}</td><td><button class="danger" data-removal-delete="${row.id}" data-removal-character="${row.character_id}" data-removal-name="${esc(row.name)}" aria-label="Permanently delete retained data for ${esc(row.name)}" title="Permanently delete retained data">🗑</button></td></tr>`).join('')}</tbody></table></div>${d.rows.length?'':'<p>No removed characters found.</p>'}<div class="actions"><button data-removal-page="-1" ${removalOffset?'':'disabled'}>Previous</button><button data-removal-page="1" ${d.more?'':'disabled'}>Next</button></div></section>`;
+  }
   if(page==='admin-installation'){
    const d=await api('/admin/installation'),s=d.settings;
    return intro('Installation Setup','Configure this Tools installation and check what is ready.')+`<div class="workspace-columns"><section class="panel compact"><h2>Site identity</h2>${d.restartRequired?'<p class="notice">Corporation identity changed. Restart the Tools service before connecting corporation data.</p>':''}<form id="installation-form"><fieldset ${d.canEdit?'':'disabled'}>
@@ -33,16 +37,17 @@ export function communityWorkspaceUI({api,intro,refresh,toast,context}){
    <button type="submit" class="primary">${draft?'Save changes':'Publish announcement'}</button>${draft?'<button type="button" data-cancel-announcement>Cancel</button><small>Changed messages become unread again. Extending expiry alone keeps read status.</small>':''}</div></form></section>
    <section class="panel compact"><h2>Published notices</h2>${d.rows.length?d.rows.map(row=>`<article class="announcement-admin-row"><div><strong>${esc(row.title)}</strong><small>${row.audience==='all'?'All members':esc(row.group_name||'Deleted group · hidden')} · Expires ${date(row.expires)}${row.expires<=Date.now()?' · Expired':''}</small><p class="announcement-message">${esc(row.body)}</p></div><div class="actions"><button data-edit-announcement="${row.id}" aria-label="Edit ${esc(row.title)}">Edit</button><button class="danger" data-delete-announcement="${row.id}" aria-label="Delete ${esc(row.title)}">Delete</button></div></article>`).join(''):'<p>No announcements published.</p>'}</section>`;
   }
-  const d=await api('/admin/audit?q='+encodeURIComponent(query)+'&offset='+offset);
-  return intro('Audit Log','Successful changes, who made them, and when. Request bodies and credentials are never stored.')+`<section class="panel compact"><form id="audit-search" class="actions">${input('q','Search actor or action',query)}<button type="submit">Search</button></form><div class="table-scroll"><table><thead><tr><th>EVE time</th><th>Actor</th><th>Action</th><th>Target</th></tr></thead><tbody>${d.rows.map(row=>`<tr><td>${date(row.at)}</td><td>${esc(row.actor)}</td><td>${esc(row.action)}</td><td>${esc(row.target)}</td></tr>`).join('')}</tbody></table></div>${!d.rows.length?'<p>No matching changes recorded.</p>':''}<div class="actions"><button data-audit-page="-1" ${offset?'':'disabled'}>Previous</button><button data-audit-page="1" ${d.more?'':'disabled'}>Next</button></div></section>`;
+  const d=await api('/admin/audit?q='+encodeURIComponent(query)+'&type='+encodeURIComponent(auditType)+'&from='+encodeURIComponent(auditFrom)+'&to='+encodeURIComponent(auditTo)+'&offset='+offset);
+  return intro('Audit Log','Activity, character and group changes, ESI issues and administration. Credentials and request bodies are never stored.')+`<section class="panel compact"><form id="audit-search" class="actions">${input('q','Search name, action or target',query)}<label>Audit type<select name="type"><option value="">All types</option>${Object.entries(d.types||{}).map(([id,label])=>`<option value="${esc(id)}" ${id===auditType?'selected':''}>${esc(label)}</option>`).join('')}</select></label>${input('from','From · EVE date',auditFrom,'date')}${input('to','To · EVE date',auditTo,'date')}<button type="submit">Search</button></form><div class="table-scroll"><table><thead><tr><th>EVE time</th><th>Actor</th><th>Type</th><th>Action</th><th>Target</th></tr></thead><tbody>${d.rows.map(row=>`<tr class="${row.type==='esi'&&row.action==='ESI issue'?'audit-esi-issue':''}"><td>${date(row.at)}</td><td>${esc(row.actor)}</td><td>${esc(d.types?.[row.type]||'Other changes')}</td><td>${row.action==='ESI issue'?'⚠ ':''}${esc(row.action)}</td><td>${esc(row.target)}</td></tr>`).join('')}</tbody></table></div>${!d.rows.length?'<p>No matching changes recorded.</p>':''}<div class="actions"><button data-audit-page="-1" ${offset?'':'disabled'}>Previous</button><button data-audit-page="1" ${d.more?'':'disabled'}>Next</button></div></section>`;
  }
  document.addEventListener('submit',async event=>{
-  if(!['installation-form','announcement-form','audit-search'].includes(event.target.id))return;
+  if(!['installation-form','announcement-form','audit-search','removal-search'].includes(event.target.id))return;
   event.preventDefault();const form=event.target,values=Object.fromEntries(new FormData(form)),button=form.querySelector('button[type="submit"]');
   if(button?.disabled)return;
   if(button)button.disabled=true;
   try{
-   if(form.id==='audit-search'){query=values.q;offset=0;await refresh();return;}
+   if(form.id==='audit-search'){query=values.q;auditType=values.type||'';auditFrom=values.from||'';auditTo=values.to||'';offset=0;await refresh();return;}
+   if(form.id==='removal-search'){removalQuery=values.q;removalOffset=0;await refresh();return;}
    if(form.id==='installation-form'){
     const result=await api('/admin/installation',{...values,corporationId:Number(values.corporationId)});
     toast(result.settings.restartRequired?'Settings saved. Restart the Tools service before connecting this corporation.':'Installation settings saved.');
@@ -51,7 +56,9 @@ export function communityWorkspaceUI({api,intro,refresh,toast,context}){
   }catch(error){toast(error.message);}finally{if(button)button.disabled=false;}
  });
  document.addEventListener('click',async event=>{
-  const button=event.target.closest('[data-edit-announcement],[data-cancel-announcement],[data-delete-announcement],[data-announcement-read],[data-audit-page],[data-create-starter-groups]');if(!button)return;
+  const button=event.target.closest('[data-removal-delete],[data-removal-page],[data-edit-announcement],[data-cancel-announcement],[data-delete-announcement],[data-announcement-read],[data-audit-page],[data-create-starter-groups]');if(!button)return;
+  if(button.hasAttribute('data-removal-page')){removalOffset=Math.max(0,removalOffset+Number(button.dataset.removalPage)*50);await refresh();return;}
+  if(button.hasAttribute('data-removal-delete')){if(!confirm('Permanently delete all retained data for '+button.dataset.removalName+'? This cannot be undone.'))return;button.disabled=true;try{await api('/admin/removals/'+button.dataset.removalDelete,{character_id:Number(button.dataset.removalCharacter)},'DELETE');await refresh();}catch(error){toast(error.message);button.disabled=false;}return;}
   if(button.hasAttribute('data-edit-announcement')||button.hasAttribute('data-cancel-announcement')){editingAnnouncement=button.hasAttribute('data-edit-announcement')?Number(button.dataset.editAnnouncement):null;await refresh();const form=document.getElementById('announcement-form');form?.scrollIntoView({block:'nearest'});form?.querySelector('[name=title]')?.focus();return;}
   if(button.hasAttribute('data-audit-page')){offset=Math.max(0,offset+Number(button.dataset.auditPage)*50);await refresh();return;}
   if(button.hasAttribute('data-delete-announcement')&&!confirm('Delete this announcement for everyone?'))return;

@@ -36,7 +36,7 @@ test('notification settings preserve all fields in the requested six groups and 
   const html=await ui.render('admin-discord');
   const groups=[...html.matchAll(/<section class="discord-notification-group"[^>]*><h3>(.*?)<\/h3><div class="discord-notification-grid">(.*?)<\/section>/gs)];
   assert.deepEqual(groups.map(m=>m[1]),['Dens','Structures','Moons','Pilots','Groups','Fuel']);
-  assert.deepEqual(groups.map(m=>[...m[2].matchAll(/name="([\w]+)-enabled"/g)].map(n=>n[1])),[['denReinforced','denAttacked','structureDestroyed'],['structureAttacked','structureReinforced','structureAnchoring'],['moonReady','moonFractured'],['corpDeparture','corpJoin'],['groupJoin','groupLeave','groupRequest'],['lowFuel','dailyFuel']]);
+  assert.deepEqual(groups.map(m=>[...m[2].matchAll(/name="([\w]+)-enabled"/g)].map(n=>n[1])),[['denReinforced','denAttacked','structureDestroyed'],['structureAttacked','structureReinforced','structureAnchoring'],['moonReady','moonFractured','towerAttacked'],['corpDeparture','corpJoin'],['groupJoin','groupLeave','groupRequest'],['lowFuel','dailyFuel']]);
   for(const key of Object.keys(discordDestinations).filter(k=>k!=='timerboard'))assert.equal(html.split('name="'+key+'-channel"').length-1,1);
   await clicks[0]({target:{closest:()=>({dataset:{discordTab:'timerboard'}})}});
   assert.doesNotMatch(await ui.render('admin-discord'),/discord-notification-group/);

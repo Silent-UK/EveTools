@@ -1,3 +1,16 @@
+# EveTools v1.0.2 - Character removals, audit history and corporation views
+
+- Unlinking a character stops tracking, removes credentials, sync jobs and sharing, and retains a snapshot archive in Admin > Users > Removals. Admins can search removals and permanently delete retained data with confirmation; removing an old archive cannot delete a newly relinked character.
+- Expand audit history with direct user activity, sign-ins and character additions/removals, group applications/leaves and settings changes, Discord connection changes, timers, links, pages and ESI failure/recovery events. Activity and repeated ESI failures are deduplicated. Add name/target, audit type and inclusive UTC date-range filters.
+- Add Corporation Standings tabs for factions, NPC corporations, corporations, alliances, agents and characters. Fix faction logos and load corporation contact standings using the new read-only contacts scope; preserve saved standings and show reconnect/error guidance when needed.
+- Split Corporation Contracts into Corporation (default) and Alliance tabs. Alliance rows and item enrichment are requested only when the Alliance view is selected.
+- Resolve Pilot, From and To names in Market journal details, keeping IDs visible and backfilling unresolved retained history in bounded batches.
+- Include the held Tower under attack notification option, native POS attack parsing, compact Discord embeds and folder paths containing spaces in the public EveTools release.
+- Align STEMP, NARVI and public EveTools version labels to 1.0.2. NARVI is pushed for Streken's manual deployment.
+
+Back up the database and existing encryption key before updating. Schema changes run automatically. Existing director connections may need Corporation ESI reauthorization for `esi-corporations.read_contacts.v1`; other saved data remains available. Removed-character archives never contain access/refresh tokens and are not exposed through normal inspection or member APIs. Existing removals without an archive cannot be reconstructed from data that was already deleted.
+
+
 # EveTools v1.0.1
 
 - Share reinforced Mercenary Den timers for verified corporation members on the site and, when enabled, the Discord Timerboard. Owners do not need a Discord link for shared timer visibility; existing alert mention and access rules are preserved.

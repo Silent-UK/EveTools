@@ -40,10 +40,10 @@ const defaults={
  'corp-moons':{q:'',region:'',system:'',state:'',sort:'value',days:'7'}
 };
 export function corporationWorkspace({api,intro,context,refresh,toast}){
- let refreshTimer=null,page='',scope='',f={},offset=0,exportData=[],copyText='',fuelText='',remoteExport=null,planCatalog=null,batch=[],planResult=null,contractExport=null;
+ let contractView='corporation',refreshTimer=null,page='',scope='',f={},offset=0,exportData=[],copyText='',fuelText='',remoteExport=null,planCatalog=null,batch=[],planResult=null,contractExport=null;
  function load(next){
   const {me}=context(),key='tools-corporation:'+me.main_id+':'+(me.inspect?.main_id||'self')+':'+next;
-  if(scope===key)return;page=next;scope=key;offset=0;exportData=[];remoteExport=null;contractExport=null;copyText='';
+  if(scope===key)return;contractView='corporation';page=next;scope=key;offset=0;exportData=[];remoteExport=null;contractExport=null;copyText='';
   f={...(defaults[page]||{})};
   try{const saved=JSON.parse(localStorage.getItem(scope)||'{}');for(const key of Object.keys(f))if(typeof saved[key]===typeof f[key])f[key]=typeof saved[key]==='string'?saved[key].slice(0,200):saved[key];validateDates(f);}catch{f={...(defaults[page]||{})};}
  }
@@ -131,10 +131,10 @@ export function corporationWorkspace({api,intro,context,refresh,toast}){
    '<small>Transfers / donations groups known donation and corporation payment categories; it does not prove the destination is another wallet division. History is limited to imported snapshots.</small>';
  }
  async function contracts(){
-  const d=await api('/corporation/contracts'),pilots=[{name:'Corporation',data:d,updated:d.updated,error:d.error}],filters={...contractPreferences(f),direction:'',availability:''};
+  const d=await api('/corporation/contracts?view='+contractView),pilots=[{name:'Corporation',data:d,updated:d.updated,error:d.error}],filters={...contractPreferences(f),direction:'',availability:''};
   if(d.refreshing){const currentScope=scope;refreshTimer=setTimeout(()=>{if(page==='corp-contracts'&&(!context().page||context().page==='corp-contracts')&&scope===currentScope&&!document.hidden)refresh();},10000);refreshTimer.unref?.();}
   const rows=contractRows(pilots,filters);contractExport=()=>contractsCSV(rows);
-  return pageStart('Corporation Contracts','Review deadlines, courier deliveries and retained contract history.',d)+
+  return pageStart('Corporation Contracts','Review deadlines, courier deliveries and retained contract history.',d)+`<div class="workspace-tabs" role="tablist" aria-label="Contract scope">${[['corporation','Corporation'],['alliance','Alliance']].map(([view,label])=>`<button type="button" role="tab" aria-selected="${contractView===view}" class="${contractView===view?'active':''}" data-cw-contract-view="${view}">${label}</button>`).join('')}</div>`+
    contractsView(pilots,filters,offset,true).replace('id="contracts-filter"','id="cw-filter"').replaceAll('data-contract-action','data-cw-action').replaceAll('data-contract-offset','data-cw-offset').replaceAll('data-contracts-offset','data-cw-offset').replace('Unique contracts across selected pilots','Unique corporation contracts').replace('Some pilots have missing, stale or failed snapshots.','Corporation contract data is missing, stale or its last refresh failed.').replace(/<label>Direction[\s\S]*?<\/label>/,'').replace(/<label>Availability[\s\S]*?<\/label>/,'');
  }
  async function market(){
@@ -171,18 +171,24 @@ export function corporationWorkspace({api,intro,context,refresh,toast}){
    '<small>Groups may continue on the next page. Missing or incomplete snapshots cannot prove that a pilot has no matching assets.</small>';
  }
  async function standings(){
-  const d=await api('/corporation/standings'),rows=(d.rows||[]).filter(r=>matches(f.q,r.name)&&(!f.kind||r.from_type===f.kind)&&(!f.sign||(f.sign==='positive'?r.standing>0:f.sign==='negative'?r.standing<0:r.standing===0))).sort((a,b)=>f.sort==='name'?a.name.localeCompare(b.name):f.sort==='high'?b.standing-a.standing:a.standing-b.standing);
+  const d=await api('/corporation/standings'),all=d.rows||[];
+  const kinds=[['faction','Factions'],['npc_corp','NPC Corporations'],['corporation','Corporations'],['alliance','Alliances'],['agent','Agents'],['character','Characters']];
+  if(!kinds.some(([kind])=>kind===f.kind))f.kind=kinds.find(([kind])=>all.some(r=>r.from_type===kind))?.[0]||'faction';
+  const rows=all.filter(r=>r.from_type===f.kind&&matches(f.q,r.name)&&(!f.sign||(f.sign==='positive'?r.standing>0:f.sign==='negative'?r.standing<0:r.standing===0))).sort((a,b)=>f.sort==='name'?a.name.localeCompare(b.name):f.sort==='high'?b.standing-a.standing:a.standing-b.standing);
   const standingName=r=>{
-   const kind={npc_corp:'corporations',corporation:'corporations',alliance:'alliances',faction:'factions',agent:'characters'}[r.from_type];
+   const kind={npc_corp:'corporations',corporation:'corporations',alliance:'alliances',faction:'corporations',agent:'characters',character:'characters'}[r.from_type];
    const id=Number(r.from_id);
    return `<span class="cw-standing-name">${kind&&Number.isSafeInteger(id)&&id>0?`<img src="https://images.evetech.net/${kind}/${id}/${kind==='characters'?'portrait':'logo'}?size=32" width="24" height="24" alt="" loading="lazy">`:''}${esc(r.name)}</span>`;
   };
   setExport(['Name','Type','Standing'],rows.map(r=>[r.name,r.from_type,r.standing]));
-  return pageStart('Corporation Standings','Faction, corporation and agent standings are grouped separately.',d)+toolbar(input('q','Search')+pick('kind','Type',options(d.rows||[],'from_type'))+pick('sign','Standing',[['','All'],['positive','Positive'],['neutral','Neutral'],['negative','Negative']])+pick('sort','Sort',[['low','Standing · lowest'],['high','Standing · highest'],['name','Name']]))+
+  const tabs=`<div class="workspace-tabs" role="tablist" aria-label="Standings type">${kinds.map(([kind,label])=>`<button type="button" role="tab" aria-selected="${f.kind===kind}" class="${f.kind===kind?'active':''}" data-cw-standing="${kind}">${label} <small>${all.filter(r=>r.from_type===kind).length}</small></button>`).join('')}</div>`;
+  const canReconnect=!context().me.inspect&&(context().me.admin||context().me.director);
+  const contactsNotice=d.contacts_error?`<p class="notice">${esc(d.contacts_error)}${d.contacts_reconnect?canReconnect?' <a href="/auth/login?corporation=1&contacts=1">Reconnect Corporation ESI</a>':' Ask a director or site admin to reconnect Corporation ESI.':' Saved contact standings are retained; retry after the temporary issue clears.'}</p>`:'';
+  return pageStart('Corporation Standings','Choose a standings type. NPC standings and corporation contact standings are kept separate.',d)+contactsNotice+tabs+toolbar(`<input type="hidden" name="kind" value="${esc(f.kind)}">`+input('q','Search')+pick('sign','Standing',[['','All'],['positive','Positive'],['neutral','Neutral'],['negative','Negative']])+pick('sort','Sort',[['low','Standing · lowest'],['high','Standing · highest'],['name','Name']]))+
    stats([['Positive',num(rows.filter(r=>r.standing>0).length)],['Neutral',num(rows.filter(r=>r.standing===0).length)],['Negative',num(rows.filter(r=>r.standing<0).length)]])+
-   [...new Set(['faction','npc_corp','agent','corporation','alliance',...rows.map(r=>r.from_type)])].map(kind=>{const group=rows.filter(r=>r.from_type===kind);return group.length?details(text(kind)+' · '+group.length,table(['Name','Standing'],group.map(r=>td(standingName(r),`<strong class="cw-standing-tone ${r.standing<0?'wallet-out':r.standing>0?'wallet-in':'muted'}">${r.standing>0?'+':''}${esc(r.standing)}</strong>`))),true):'';}).join('')+
-   (rows.length?'':'<p>No matching standings.</p>');
+   table(['Name','Standing'],rows.map(r=>td(standingName(r),`<strong class="cw-standing-tone ${r.standing<0?'wallet-out':r.standing>0?'wallet-in':'muted'}">${r.standing>0?'+':''}${esc(r.standing)}</strong>`)))+(rows.length?'':'<p>No matching standings in this tab.</p>');
  }
+
  async function industry(){
   const d=await api('/corporation/industry'),all=d.rows||[],rows=all.filter(r=>matches(f.q,r.name,r.installer,r.location)&&(!f.status||(f.status==='ready'?jobState(r).startsWith('ready'):jobState(r)===f.status))&&(!f.activity||String(r.activity_id)===f.activity)&&(!f.installer||r.installer===f.installer)&&(!f.location||r.location===f.location)).sort((a,b)=>Number(!jobState(a).startsWith('ready'))-Number(!jobState(b).startsWith('ready'))||Date.parse(a.end_date)-Date.parse(b.end_date));
   setExport(['Product','Activity','Runs','Installer','Facility','Status','Completion UTC'],rows.map(r=>[r.name,activities[r.activity_id],r.runs,r.installer,r.location,jobState(r),r.end_date]));
@@ -290,6 +296,8 @@ export function corporationWorkspace({api,intro,context,refresh,toast}){
   const b=e.target.closest('button');if(!b||!b.closest('.corp-workspace'))return;
   try{
    const action=b.dataset.cwAction;
+   if(b.dataset.cwContractView){contractView=b.dataset.cwContractView;offset=0;await refresh();return;}
+   if(b.dataset.cwStanding!==undefined){f.kind=b.dataset.cwStanding;offset=0;save();await refresh();return;}
    if(action==='clear'){f={...(defaults[page]||{})};offset=0;save();await refresh();}
    if(action==='export'){b.disabled=true;download(contractExport?contractExport():csv(remoteExport?await remoteExport():exportData));b.disabled=false;}
    if(action==='copy'||action==='copy-collections'||action==='copy-materials'||action==='copy-fuel'){
@@ -302,5 +310,5 @@ export function corporationWorkspace({api,intro,context,refresh,toast}){
    if(b.dataset.cwRemoveJob!==undefined){batch.splice(Number(b.dataset.cwRemoveJob),1);planResult=null;await refresh();}
   }catch(error){b.disabled=false;toast(error.message);}
  });
- return {render,handles:next=>corpPages.includes(next)};
+ return {render,navigated:next=>{if(next!=='corp-contracts')contractView='corporation';},handles:next=>corpPages.includes(next)};
 }

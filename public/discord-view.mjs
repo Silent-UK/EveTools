@@ -12,7 +12,7 @@ export function discordUI({api,esc,intro,date,refresh,toast,context}){
   const groups=[
    ['Dens',['denReinforced','denAttacked','structureDestroyed']],
    ['Structures',['structureAttacked','structureReinforced','structureAnchoring']],
-   ['Moons',['moonReady','moonFractured']],
+   ['Moons',['moonReady','moonFractured','towerAttacked']],
    ['Pilots',['corpDeparture','corpJoin']],
    ['Groups',['groupJoin','groupLeave','groupRequest']],
    ['Fuel',['lowFuel','dailyFuel']]
